@@ -1,0 +1,120 @@
+name: Android
+
+# Étapes du build APK, réutilisées par ci.yml (artefact) et release.yml (Release GitHub).
+on:
+  workflow_call:
+    inputs:
+      version_name:
+        description: "android:versionName"
+        type: string
+        default: "0.1.0"
+      version_code:
+        description: "android:versionCode"
+        type: string
+        default: "1"
+      require_release_key:
+        description: "Échouer si la clé de publication manque (releases)"
+        type: boolean
+        default: false
+    secrets:
+      # Clé de publication. Absente (fork, dépôt fraîchement cloné) → l'APK est signé
+      # avec une clé de debug jetable : installable, mais pas mettable à jour par-dessus.
+      ANDROID_KEYSTORE_B64:
+        required: false
+      ANDROID_KEY_ALIAS:
+        required: false
+      ANDROID_KEYSTORE_PASS:
+        required: false
+
+env:
+  QT_VER: 6.8.2
+  NDK_VER: 26.1.10909125
+  BUILD_TOOLS_VER: 35.0.0
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Outils de build
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake
+
+      - name: Android NDK + build-tools
+        # Le SDK est préinstallé sur le runner, mais sdkmanager n'est pas dans le PATH.
+        run: |
+          SDKMANAGER="$(find "$ANDROID_SDK_ROOT/cmdline-tools" -name sdkmanager -type f | head -1)"
+          [ -n "$SDKMANAGER" ] || { echo "sdkmanager introuvable dans $ANDROID_SDK_ROOT" >&2; exit 1; }
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" --install "platforms;android-35" \
+                                  "build-tools;${BUILD_TOOLS_VER}" \
+                                  "ndk;${NDK_VER}"
+
+      # Qt hôte (androiddeployqt, qmlimportscanner) + Qt Android, même version.
+      - name: Cache Qt
+        id: cache-qt
+        uses: actions/cache@v4
+        with:
+          path: ~/Qt
+          key: qt-${{ env.QT_VER }}-linux-android-arm64-mm
+
+      - name: Qt ${{ env.QT_VER }} (hôte + android_arm64_v8a)
+        if: steps.cache-qt.outputs.cache-hit != 'true'
+        run: |
+          python3 -m pip install --user aqtinstall
+          python3 -m aqt install-qt linux desktop "$QT_VER" linux_gcc_64 \
+            -m qtwebsockets qtmultimedia -O "$HOME/Qt"
+          python3 -m aqt install-qt linux android "$QT_VER" android_arm64_v8a \
+            -m qtwebsockets qtmultimedia -O "$HOME/Qt"
+
+      - name: Cache libs arm64
+        id: cache-libs
+        uses: actions/cache@v4
+        with:
+          path: ~/android-libs
+          key: androidlibs-arm64-sodium1.0.20-secp0.7.0-ndk${{ env.NDK_VER }}
+
+      - name: Cross-compile libsodium + libsecp256k1
+        if: steps.cache-libs.outputs.cache-hit != 'true'
+        run: |
+          ANDROID_NDK_ROOT="$ANDROID_SDK_ROOT/ndk/$NDK_VER" \
+            bash scripts/build-android-deps.sh
+
+      # Une release signée par une clé qui change à chaque build est ininstallable
+      # par-dessus la précédente : mieux vaut échouer ici, avec la marche à suivre.
+      - name: Vérifier la clé de publication
+        if: inputs.require_release_key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Secret ANDROID_KEYSTORE_B64 absent. Sans clé de publication stable," \
+                 "chaque release aurait une signature différente et ne pourrait pas être" \
+                 "installée par-dessus la précédente. Créez la clé une fois :" \
+                 "bash scripts/make-release-key.sh"
+            exit 1
+          fi
+
+      - name: Build + signature de l'APK
+        env:
+          VERSION_NAME: ${{ inputs.version_name }}
+          VERSION_CODE: ${{ inputs.version_code }}
+          OUT: ${{ github.workspace }}/colotaches-arm64.apk
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEYALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          STOREPASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        # ANDROID_SDK_ROOT vient du runner : il n'existe que dans l'env du shell.
+        run: SDK_ROOT="$ANDROID_SDK_ROOT" bash scripts/build-android.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colotaches-arm64-apk
+          path: colotaches-arm64.apk
+          if-no-files-found: error

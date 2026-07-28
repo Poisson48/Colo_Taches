@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build \
+            qt6-base-dev qt6-declarative-dev qt6-websockets-dev qt6-multimedia-dev \
+            libsodium-dev libqt6sql6-sqlite libsecp256k1-dev \
+            qml6-module-qtquick qml6-module-qtquick-controls \
+            qml6-module-qtquick-layouts qml6-module-qtquick-templates \
+            qml6-module-qtquick-window qml6-module-qtquick-dialogs \
+            qml6-module-qtqml-workerscript
+          # Modules QML d'exécution : les paquets -dev ne fournissent que headers et
+          # CMake ; sans eux, tst_qml échoue (plugin QtQuick.Controls introuvable).
+
+      - name: Configure
+        run: cmake -B build -G Ninja
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  # APK arm64 signé, récupérable dans les artefacts du run.
+  android:
+    uses: ./.github/workflows/android.yml
+    # Signé avec la clé de publication si elle est configurée : un APK de CI s'installe
+    # alors par-dessus une release, sans désinstaller.
+    secrets: inherit
+
+  # AppImage Linux, récupérable dans les artefacts du run.
+  desktop:
+    uses: ./.github/workflows/desktop.yml

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#2E7D32</color>
+    <!-- Doit rester aligné sur Theme.background / Theme.surface (src/qml/Theme.qml). -->
+    <color name="app_background">#101311</color>
+    <color name="app_surface">#1A1F1C</color>
+</resources>

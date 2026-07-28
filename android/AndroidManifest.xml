@@ -1,0 +1,80 @@
+<?xml version="1.0"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.colotaches.app"
+    android:installLocation="auto"
+    android:versionCode="1"
+    android:versionName="0.1.0">
+
+    <!-- Relais Nostr en wss:// : réseau obligatoire. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Savoir si on est hors ligne (bandeau + file d'attente outbox, SPEC §3.5). -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- Notification locale après un merge distant (SPEC §8). Runtime sur Android 13+. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Scan du QR d'appairage. Runtime, et l'app reste utilisable sans (lien collé). -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- L'app se distribue hors Play Store : personne ne la met à jour à notre place,
+         elle télécharge donc la dernière release et la propose à l'installation.
+         Android demande sa propre confirmation avant d'installer quoi que ce soit. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- Retour haptique au cochage en mode Courses. Pas de permission runtime. -->
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+
+    <supports-screens
+        android:anyDensity="true"
+        android:largeScreens="true"
+        android:normalScreens="true"
+        android:smallScreens="true"/>
+
+    <application
+        android:name="org.qtproject.qt.android.bindings.QtApplication"
+        android:label="Colo Tâches"
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@style/ColoTheme"
+        android:hardwareAccelerated="true"
+        android:allowBackup="true"
+        android:fullBackupOnly="false"
+        android:allowNativeHeapPointerTagging="false">
+
+        <activity
+            android:name="org.qtproject.qt.android.bindings.QtActivity"
+            android:label="Colo Tâches"
+            android:launchMode="singleTop"
+            android:screenOrientation="unspecified"
+            android:exported="true"
+            android:theme="@style/ColoTheme"
+            android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|layoutDirection|locale|fontScale|keyboard|keyboardHidden|navigation|mcc|mnc|density"
+            android:windowSoftInputMode="adjustResize">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+
+            <!-- Lien d'invitation : ouvrir colotaches://join/… depuis WhatsApp, SMS…
+                 Qt le remet à QDesktopServices::setUrlHandler (src/app/main.cpp). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="colotaches" android:host="join"/>
+            </intent-filter>
+
+            <!-- Remplacés par androiddeployqt : ne pas figer ces valeurs. -->
+            <meta-data android:name="android.app.lib_name" android:value="-- %%INSERT_APP_LIB_NAME%% --"/>
+            <meta-data android:name="android.app.arguments" android:value="-- %%INSERT_APP_ARGUMENTS%% --"/>
+            <meta-data android:name="android.app.extract_android_style" android:value="minimal"/>
+        </activity>
+
+        <!-- Mise à jour depuis l'app : PackageInstaller répond ici. Non exporté, et
+             restreint à notre propre action : personne d'autre ne peut le déclencher. -->
+        <receiver
+            android:name="org.colotaches.app.Platform$InstallReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="org.colotaches.app.INSTALL_STATUS"/>
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

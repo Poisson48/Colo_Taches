@@ -1,0 +1,123 @@
+name: Release
+
+# Tag v* (ex. v0.2.0) → APK arm64 signé, publié dans les Releases GitHub.
+#   git tag -a v0.2.0 -m "…" && git push origin v0.2.0
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.v.outputs.name }}
+      code: ${{ steps.v.outputs.code }}
+    steps:
+      # versionName = tag sans le "v". versionCode = entier croissant : on prend le
+      # nombre de commits, monotone par construction (Android exige un entier qui monte).
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: v
+        run: |
+          echo "name=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          echo "code=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+
+  apk:
+    needs: version
+    uses: ./.github/workflows/android.yml
+    with:
+      version_name: ${{ needs.version.outputs.name }}
+      version_code: ${{ needs.version.outputs.code }}
+      # Une release doit porter la clé de publication : sinon elle ne s'installerait
+      # pas par-dessus la version précédente.
+      require_release_key: true
+    secrets: inherit
+
+  appimage:
+    needs: version
+    uses: ./.github/workflows/desktop.yml
+    with:
+      version_name: ${{ needs.version.outputs.name }}
+
+  publish:
+    needs: [version, apk, appimage]
+    runs-on: ubuntu-latest
+    steps:
+      # Le message du tag EST le changelog : l'app l'affiche avant d'installer
+      # (cf. Updater::notesFromBody). Il faut donc le dépôt, et les tags annotés.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Nouveautés = message du tag
+        run: |
+          git fetch --force --tags origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          NOTES="$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME")"
+          if [ -z "$(printf '%s' "$NOTES" | tr -d '[:space:]')" ]; then
+            NOTES="Corrections et améliorations."
+          fi
+          {
+            echo "NOTES<<COLO_EOF"
+            printf '%s\n' "$NOTES"
+            echo "COLO_EOF"
+          } >> "$GITHUB_ENV"
+
+      # Les deux artefacts (APK Android, AppImage Linux) réunis dans le dossier courant.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: colotaches-*
+          merge-multiple: true
+
+      - name: Renommer l'APK avec la version
+        run: mv colotaches-arm64.apk "colotaches-${GITHUB_REF_NAME}-arm64.apk"
+
+      - name: Publier la Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # Idempotent : GitHub peut livrer deux fois l'événement de tag, et un second
+        # `release create` échouerait sur « tag already exists ».
+        run: |
+          APK="colotaches-${GITHUB_REF_NAME}-arm64.apk"
+          APPIMAGE="$(ls ColoTaches-*-x86_64.AppImage 2>/dev/null | head -1)"
+          [ -n "$APPIMAGE" ] || { echo "AppImage introuvable" >&2; exit 1; }
+
+          # Corps de la release : les nouveautés d'abord — c'est CETTE partie que l'app
+          # affiche avant d'installer — puis une ligne « --- », puis ce qui n'a de sens
+          # que sur la page GitHub. L'app coupe au séparateur (Updater::notesFromBody).
+          {
+            printf '%s\n\n' "$NOTES"
+            printf -- '---\n\n'
+            cat <<'EOF'
+          ## Installation
+
+          **PC / Linux (x86-64)** — l'AppImage `ColoTaches-*-x86_64.AppImage` :
+          `chmod +x ColoTaches-*.AppImage && ./ColoTaches-*.AppImage`. Autonome, rien à installer.
+
+          **Android (arm64)** — l'APK `colotaches-*-arm64.apk` : ouvrez-le sur le téléphone
+          (autorisez l'installation depuis cette source), ou `adb install -r colotaches-*-arm64.apk`.
+          Signé avec la clé de publication du projet : les versions suivantes s'installent
+          **par-dessus**, sans désinstaller ni perdre vos listes — et l'app vous les proposera.
+
+          *Venant d'une version Android antérieure à la v0.3.0 ? Ces APK-là portaient une
+          signature qui changeait à chaque build : une dernière désinstallation est
+          nécessaire avant d'installer celui-ci.*
+
+          **Limite connue** : app fermée = pas de réception. Les changements sont récupérés
+          à l'ouverture ou au retour au premier plan.
+          EOF
+          } > notes.md
+
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$APK" "$APPIMAGE" \
+              --repo "$GITHUB_REPOSITORY" --clobber
+            exit 0
+          fi
+          gh release create "$GITHUB_REF_NAME" "$APK" "$APPIMAGE" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Colo Tâches $GITHUB_REF_NAME" \
+            --notes-file notes.md

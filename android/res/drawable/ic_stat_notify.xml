@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Petite icône de notification : silhouette blanche opaque, Android la teinte
+     lui-même. Pas de couleur ni de dégradé, sinon elle apparaît en carré gris. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Contour de la feuille -->
+    <path
+        android:pathData="M6,3 h12 a2,2 0 0 1 2,2 v14 a2,2 0 0 1 -2,2 h-12 a2,2 0 0 1 -2,-2 v-14 a2,2 0 0 1 2,-2 z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineJoin="round"/>
+
+    <!-- Ligne cochée -->
+    <path
+        android:pathData="M7,9.2 l1.6,1.6 l2.8,-3"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+    <path
+        android:pathData="M13.5,9 h3.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"/>
+
+    <!-- Ligne à faire -->
+    <path
+        android:pathData="M7,15 h2.6"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"/>
+    <path
+        android:pathData="M13.5,15 h3.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"/>
+</vector>

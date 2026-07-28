@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sans thème explicite, l'écran de démarrage est blanc : flash aveuglant avant
+         l'apparition de l'UI sombre. On aligne aussi les barres système. -->
+    <style name="ColoTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/app_background</item>
+        <item name="android:statusBarColor">@color/app_surface</item>
+        <item name="android:navigationBarColor">@color/app_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

@@ -1,0 +1,37 @@
+# Build
+build*/
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles/
+*.o
+*.so
+*.a
+
+# Qt
+*.pro.user
+.qmlls.ini
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+
+# Android
+android-build/
+*.apk
+*.aab
+.gradle/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Local
+*.local
+.env
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+aqtinstall.log
+
+# Sortie de ctest lancé depuis la racine
+Testing/

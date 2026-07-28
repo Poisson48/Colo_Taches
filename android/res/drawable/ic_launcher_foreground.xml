@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Premier plan de l'icône adaptative : une liste de courses (feuille blanche,
+     deux lignes cochées, une à faire). Zone sûre = 72dp centrés sur 108. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- La feuille -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,24 h40 a5,5 0 0 1 5,5 v50 a5,5 0 0 1 -5,5 h-40 a5,5 0 0 1 -5,-5 v-50 a5,5 0 0 1 5,-5 z"/>
+
+    <!-- Ligne 1 : cochée -->
+    <path
+        android:pathData="M36,40 l4,4 l7,-8"
+        android:strokeColor="#2E7D32"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+    <path
+        android:pathData="M53,40 h18"
+        android:strokeColor="#2E7D32"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"/>
+
+    <!-- Ligne 2 : cochée -->
+    <path
+        android:pathData="M36,54 l4,4 l7,-8"
+        android:strokeColor="#2E7D32"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+    <path
+        android:pathData="M53,54 h18"
+        android:strokeColor="#2E7D32"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"/>
+
+    <!-- Ligne 3 : à faire (case vide) -->
+    <path
+        android:pathData="M36,64 h9 v9 h-9 z"
+        android:strokeColor="#81C784"
+        android:strokeWidth="3"
+        android:strokeLineJoin="round"/>
+    <path
+        android:pathData="M53,68 h18"
+        android:strokeColor="#81C784"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"/>
+</vector>

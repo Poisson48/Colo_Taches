@@ -1,0 +1,108 @@
+name: Desktop
+
+# Construit l'AppImage Linux x86-64. Réutilisé par ci.yml (artefact) et release.yml
+# (joint à la Release GitHub). AppImage autonome : Qt embarqué, lançable partout.
+on:
+  workflow_call:
+    inputs:
+      version_name:
+        description: "Version, pour le nom du fichier"
+        type: string
+        default: "0.0.0"
+
+env:
+  QT_VER: 6.8.2
+
+jobs:
+  appimage:
+    # Ubuntu ancien = glibc plus vieille = AppImage compatible avec plus de distributions.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Outils et bibliothèques
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake \
+            libsodium-dev \
+            libgl1-mesa-dev libegl1-mesa-dev \
+            libfontconfig1 libfreetype6 wget file \
+            libxkbcommon-dev libxkbcommon-x11-0 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 \
+            libxcb-xkb1 libxcb-util1
+          # Dépendances du plugin de plateforme xcb, que linuxdeploy embarque : sans
+          # elles, l'empaquetage s'arrête sur « dépendance introuvable ».
+
+      # La libsecp256k1 d'Ubuntu 22.04 est trop ancienne (secp256k1_schnorrsig_sign32
+      # absent). On garde 22.04 pour un AppImage compatible avec un large éventail de
+      # distributions (glibc ancienne), et on construit secp256k1 depuis les sources —
+      # même version 0.7.0 que le build Android (scripts/build-android-deps.sh).
+      - name: Cache libsecp256k1
+        id: cache-secp
+        uses: actions/cache@v4
+        with:
+          path: ~/secp
+          key: secp256k1-0.7.0-jammy
+
+      - name: libsecp256k1 0.7.0 (sources)
+        if: steps.cache-secp.outputs.cache-hit != 'true'
+        run: |
+          curl -fL -o secp.tar.gz \
+            https://github.com/bitcoin-core/secp256k1/archive/refs/tags/v0.7.0.tar.gz
+          tar xzf secp.tar.gz
+          cmake -S secp256k1-0.7.0 -B secp-build -G Ninja \
+            -DCMAKE_INSTALL_PREFIX="$HOME/secp" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSECP256K1_ENABLE_MODULE_SCHNORRSIG=ON \
+            -DSECP256K1_ENABLE_MODULE_EXTRAKEYS=ON \
+            -DSECP256K1_BUILD_TESTS=OFF -DSECP256K1_BUILD_BENCHMARK=OFF \
+            -DSECP256K1_BUILD_EXAMPLES=OFF -DBUILD_SHARED_LIBS=OFF
+          cmake --build secp-build -j"$(nproc)"
+          cmake --install secp-build
+
+      - name: Cache Qt
+        id: cache-qt
+        uses: actions/cache@v4
+        with:
+          path: ~/Qt
+          # Clé versionnée : repart d'un kit Qt intact. (nomm = sans qtmultimedia ;
+          # v2 = un run précédent avait supprimé un plugin SQL du kit, corrompant sa
+          # config CMake mise en cache — on n'y touche plus, cf. build-appimage.sh.)
+          key: qt-desktop-${{ env.QT_VER }}-linux-gcc64-nomm-v2
+
+      - name: Qt ${{ env.QT_VER }} (desktop)
+        if: steps.cache-qt.outputs.cache-hit != 'true'
+        run: |
+          python3 -m pip install --user aqtinstall
+          # qtdeclarative (par défaut) apporte Quick, Controls, Dialogs, Layouts.
+          # Pas de qtmultimedia : sur desktop le scan caméra est désactivé (on colle le
+          # lien d'appairage), ce qui évite la dépendance PulseAudio au link.
+          python3 -m aqt install-qt linux desktop "$QT_VER" linux_gcc_64 \
+            -m qtwebsockets -O "$HOME/Qt"
+
+      - name: Cache des outils AppImage
+        uses: actions/cache@v4
+        with:
+          path: build/appimage-tools
+          key: appimage-tools-linuxdeploy
+
+      - name: Build + AppImage
+        env:
+          VERSION_NAME: ${{ inputs.version_name }}
+        run: |
+          QT_ROOT="$HOME/Qt/$QT_VER/gcc_64"
+          export PATH="$QT_ROOT/bin:$PATH"
+          # secp256k1 construit depuis les sources : le trouver via pkg-config.
+          export PKG_CONFIG_PATH="$HOME/secp/lib/pkgconfig:$HOME/secp/lib64/pkgconfig"
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT"
+          cmake --build build --target colotaches -j"$(nproc)"
+          QT_ROOT="$QT_ROOT" VERSION_NAME="$VERSION_NAME" bash scripts/build-appimage.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colotaches-appimage
+          path: ColoTaches-*-x86_64.AppImage
+          if-no-files-found: error
