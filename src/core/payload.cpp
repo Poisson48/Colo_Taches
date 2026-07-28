@@ -201,6 +201,9 @@ std::optional<Payload> parsePayload(const std::string& jsonStr) {
             if (f.contains("image")) {
                 if (parseVersionedField(f["image"], item.image, item.imageVer)) anyField = true;
             }
+            if (f.contains("due")) {
+                if (parseVersionedField(f["due"], item.due, item.dueVer)) anyField = true;
+            }
             if (f.contains("order")) {
                 if (parseVersionedField(f["order"], item.order, item.orderVer)) anyField = true;
             }
@@ -305,6 +308,7 @@ std::string serializePayload(const Payload& p) {
         f["note"]  = json::array({item.note,  verToJson(item.noteVer)});
         f["aisle"] = json::array({item.aisle, verToJson(item.aisleVer)});
         f["image"] = json::array({item.image, verToJson(item.imageVer)});
+        f["due"]   = json::array({item.due,   verToJson(item.dueVer)});
         f["order"] = json::array({item.order, verToJson(item.orderVer)});
         f["done"] = json::array({item.done, verToJson(item.doneVer)});
         f["del"]  = json::array({item.del,  verToJson(item.delVer)});

@@ -102,6 +102,31 @@ public class Platform {
         }
     }
 
+    // --- Agenda ---
+    // ACTION_INSERT sur le calendrier : l'app d'agenda s'ouvre pré-remplie (titre,
+    // description, journée entière) et c'est l'utilisateur qui confirme. Aucune
+    // permission calendrier requise — on n'écrit rien nous-mêmes.
+    public static boolean addCalendarEvent(Context ctx, String title,
+                                           String description, long startMs) {
+        if (ctx == null)
+            return false;
+        try {
+            Intent intent = new Intent(Intent.ACTION_INSERT)
+                .setData(android.provider.CalendarContract.Events.CONTENT_URI)
+                .putExtra(android.provider.CalendarContract.Events.TITLE, title)
+                .putExtra(android.provider.CalendarContract.Events.DESCRIPTION, description)
+                .putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, startMs)
+                .putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME,
+                          startMs + 24L * 3600 * 1000)
+                .putExtra(android.provider.CalendarContract.EXTRA_EVENT_ALL_DAY, true);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(intent);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     // --- Mise à jour depuis l'app ---
     //
     // PackageInstaller plutôt qu'un Intent ACTION_VIEW sur un content:// : celui-ci

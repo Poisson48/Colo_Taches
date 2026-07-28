@@ -159,6 +159,11 @@ public slots:
     // Retire UNE photo de la tâche (les autres restent).
     void removeTaskImage(const QString &itemId, const QString &sha);
 
+    // --- Échéance / agenda ---
+    // Propose l'événement à l'agenda : Android ouvre l'app d'agenda pré-remplie
+    // (journée entière) ; ailleurs, un fichier .ics est ouvert par l'app par défaut.
+    void addToCalendar(const QString &name, const QString &note, double dueMs);
+
     // --- Historique (local) : ce qui a déjà été fait dans une liste ---
     // [{ name, aisle, doneAt, byName }, …], le plus récent d'abord.
     QVariantList history(const QString &listId);

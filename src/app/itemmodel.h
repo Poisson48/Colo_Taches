@@ -52,6 +52,8 @@ public:
         // Progression des étapes de la tâche (0/0 si elle n'en a pas).
         StepsTotalRole,
         StepsDoneRole,
+        // Échéance (ms epoch, 0 = pas d'échéance). Facultative, étapes comprises.
+        DueRole,
     };
 
     // Rayons d'origine, dans l'ordre où on traverse un magasin. C'est cet ordre qui trie
@@ -120,6 +122,9 @@ public slots:
     // contre une modification distante concurrente qu'on n'a pas encore reçue.
     void editItem(const QString &itemId, const QString &name,
                   const QString &qty, const QString &note, const QString &aisle);
+
+    // Échéance (LWW) : ms epoch du jour visé, 0 = la retirer. Tâches et étapes.
+    void setDue(const QString &itemId, double dueMs);
 
     // Photos de la tâche : le champ LWW `image` porte la liste des shas (séparés
     // par des espaces), dans l'ordre d'ajout — « avant » puis « après ». Les blobs

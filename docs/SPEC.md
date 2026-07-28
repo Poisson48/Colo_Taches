@@ -41,6 +41,7 @@ Chaque champ porte sa propre version :
 | `note` | string (libre) | détails de la tâche |
 | `aisle` | string (libellé de la catégorie, "" = non classé) | catégorie (Ménage, Jardin…) |
 | `image` | string : shas256 hex des blobs JPEG séparés par des espaces ("" = aucune) | photos de la tâche (avant, après…), dans l'ordre d'ajout |
+| `due` | int64 (ms epoch au minuit local du jour visé, 0 = aucune) | échéance facultative, tâches et étapes |
 | `order` | int64 | position manuelle dans son groupe |
 | `done` | bool | coché = fait |
 | `del` | bool | tombstone (supprimé) |

@@ -35,6 +35,11 @@ bool mergeItem(Item& local, const Item& remote) {
         local.imageVer = remote.imageVer;
         changed = true;
     }
+    if (remote.dueVer > local.dueVer) {
+        local.due    = remote.due;
+        local.dueVer = remote.dueVer;
+        changed = true;
+    }
     if (remote.orderVer > local.orderVer) {
         local.order    = remote.order;
         local.orderVer = remote.orderVer;

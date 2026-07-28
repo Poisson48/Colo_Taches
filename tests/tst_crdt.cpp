@@ -678,13 +678,29 @@ static void test_MergeImageAndParent() {
     EXPECT_TRUE(mergeItem(local, removal));
     EXPECT_EQ(local.image, "");
 
+    // L'échéance suit la même règle LWW ; la retirer (0) est une écriture comme
+    // une autre.
+    Item withDue = local;
+    withDue.due    = 1721000000000LL;
+    withDue.dueVer = makeVer(9, "devB");
+    EXPECT_TRUE(mergeItem(local, withDue));
+    EXPECT_EQ(local.due, 1721000000000LL);
+    Item staleDue = local;
+    staleDue.due    = 42;
+    staleDue.dueVer = makeVer(4, "devC");
+    EXPECT_FALSE(mergeItem(local, staleDue));
+    EXPECT_EQ(local.due, 1721000000000LL);
+
     // Un pair qui ignore le champ (version {0,""}) ne peut rien effacer.
     Item legacy = local;
     legacy.image    = "";
     legacy.imageVer = makeVer(0, "");
+    legacy.due      = 0;
+    legacy.dueVer   = makeVer(0, "");
     legacy.parentId = "";   // et un parentId divergent n'est jamais adopté
     EXPECT_FALSE(mergeItem(local, legacy));
     EXPECT_EQ(local.parentId, "task-1");
+    EXPECT_EQ(local.due, 1721000000000LL);
 
     // Un item inconnu est inséré tel quel, parentId compris.
     std::map<std::string, Item> map;

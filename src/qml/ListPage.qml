@@ -463,13 +463,15 @@ Item {
                                 elide: Text.ElideRight
                             }
 
-                            // Progression des étapes et détails sur une ligne :
-                            // « 2/5 étapes \u00b7 acheter la peinture d'abord ».
+                            // Échéance, progression des étapes et détails sur une
+                            // ligne : « pour demain \u00b7 2/5 étapes \u00b7 la peinture d'abord ».
                             Label {
                                 Layout.fillWidth: true
                                 visible: text.length > 0
                                 text: {
                                     const parts = []
+                                    if (model.due > 0)
+                                        parts.push(root.dueText(model.due))
                                     if (model.stepsTotal > 0)
                                         parts.push(model.stepsDone + "/" + model.stepsTotal
                                                    + " étape" + (model.stepsTotal > 1 ? "s" : ""))
@@ -477,8 +479,12 @@ Item {
                                         parts.push(model.note)
                                     return parts.join(" \u00b7 ")
                                 }
-                                color: model.stepsTotal > 0 && model.stepsDone === model.stepsTotal
-                                       ? Theme.accent : Theme.textDim
+                                // Le retard crie, le reste chuchote.
+                                color: root.isOverdue(model.due) && !model.done
+                                       ? Theme.danger
+                                       : (model.stepsTotal > 0
+                                          && model.stepsDone === model.stepsTotal
+                                          ? Theme.accent : Theme.textDim)
                                 font.pixelSize: 13
                                 elide: Text.ElideRight
                             }
@@ -846,6 +852,27 @@ Item {
     // L'utilisateur a-t-il choisi la catégorie lui-même pour la tâche en cours ? Si
     // oui, on cesse de la pré-remplir d'après le nom. Réinitialisé à chaque tâche.
     property bool aisleManual: false
+
+    // Échéance en clair : « pour demain », « en retard (3 juil.) »… "" si aucune.
+    function dueText(ms) {
+        if (!ms || ms <= 0)
+            return ""
+        const today = new Date(); today.setHours(0, 0, 0, 0)
+        const d = new Date(ms);   d.setHours(0, 0, 0, 0)
+        const diff = Math.round((d - today) / 86400000)
+        if (diff < 0)  return "en retard (" + Qt.formatDate(d, "d MMM") + ")"
+        if (diff === 0) return "pour aujourd'hui"
+        if (diff === 1) return "pour demain"
+        if (diff < 7)  return "pour " + Qt.formatDate(d, "dddd")
+        return "pour le " + Qt.formatDate(d, "d MMM")
+    }
+
+    function isOverdue(ms) {
+        if (!ms || ms <= 0)
+            return false
+        const today = new Date(); today.setHours(0, 0, 0, 0)
+        return ms < today.getTime()
+    }
 
     // Ouvre la page de détail (étapes, photo, description) d'une tâche.
     function openTask(itemId) {

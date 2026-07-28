@@ -55,11 +55,16 @@ struct Item {
     int64_t order = 0;
     Ver     orderVer;
 
-    // Photo de la tâche : sha256 hex du blob JPEG compressé ("" = pas d'image).
-    // Champ LWW comme les autres ; le blob lui-même circule dans un événement
-    // « img » séparé et vit dans la table images (satellite adressé par contenu).
+    // Photos de la tâche : shas256 hex des blobs JPEG, séparés par des espaces
+    // ("" = aucune). Champ LWW comme les autres ; les blobs circulent dans des
+    // événements « img » séparés et vivent dans la table images.
     std::string image;
     Ver         imageVer;
+
+    // Échéance (ms epoch au minuit local du jour visé, 0 = pas d'échéance).
+    // Facultative, valable pour une tâche comme pour une étape.
+    int64_t due = 0;
+    Ver     dueVer;
 
     bool done = false;
     Ver  doneVer;

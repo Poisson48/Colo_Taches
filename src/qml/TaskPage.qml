@@ -90,6 +90,27 @@ Item {
             AppController.toast("Sélecteur de fichiers indisponible")
     }
 
+    // Échéance en clair : « pour demain », « en retard (3 juil.) »… "" si aucune.
+    function dueText(ms) {
+        if (!ms || ms <= 0)
+            return ""
+        const today = new Date(); today.setHours(0, 0, 0, 0)
+        const d = new Date(ms);   d.setHours(0, 0, 0, 0)
+        const diff = Math.round((d - today) / 86400000)
+        if (diff < 0)  return "en retard (" + Qt.formatDate(d, "d MMM") + ")"
+        if (diff === 0) return "pour aujourd'hui"
+        if (diff === 1) return "pour demain"
+        if (diff < 7)  return "pour " + Qt.formatDate(d, "dddd")
+        return "pour le " + Qt.formatDate(d, "d MMM")
+    }
+
+    function isOverdue(ms) {
+        if (!ms || ms <= 0)
+            return false
+        const today = new Date(); today.setHours(0, 0, 0, 0)
+        return ms < today.getTime()
+    }
+
     // Une date lisible : « aujourd'hui à 18:32 », « hier à 09:05 », sinon « 3 juil. à 14:20 ».
     function formatStamp(ms) {
         if (!ms || ms <= 0)
@@ -191,6 +212,63 @@ Item {
                     anchors.fill: parent
                     anchors.leftMargin: Theme.touchTarget + 10
                     onClicked: editDialog.openFor(root.task)
+                }
+            }
+
+            // --- Échéance : facultative, posée en un tap, envoyable à l'agenda ---
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Button {
+                    Layout.fillWidth: true
+                    flat: true
+                    implicitHeight: 40
+                    contentItem: Label {
+                        text: root.task && root.task.due > 0
+                              ? "Échéance : " + root.dueText(root.task.due)
+                              : "＋  Ajouter une échéance"
+                        color: root.task && root.isOverdue(root.task.due) && !root.task.done
+                               ? Theme.danger : Theme.accent
+                        font.pixelSize: 13
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
+                    background: Rectangle {
+                        radius: 10
+                        color: parent.pressed ? Theme.surfaceHigh : "transparent"
+                        border.color: Theme.outline
+                        border.width: 1
+                    }
+                    onClicked: {
+                        dueDialog.targetStep = ""
+                        dueDialog.openFor(root.task && root.task.due ? root.task.due : 0)
+                    }
+                }
+
+                // Vers l'agenda du téléphone (ou un .ics sur ordinateur).
+                Button {
+                    visible: root.task && root.task.due > 0
+                    flat: true
+                    implicitHeight: 40
+                    contentItem: Label {
+                        text: "Agenda"
+                        color: Theme.accent
+                        font.pixelSize: 13
+                        font.weight: Font.DemiBold
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 10
+                        color: parent.pressed ? Theme.surfaceHigh : "transparent"
+                        border.color: Theme.outline
+                        border.width: 1
+                    }
+                    onClicked: AppController.addToCalendar(root.task.name,
+                                                          root.task.note || "",
+                                                          root.task.due)
                 }
             }
 
@@ -366,12 +444,14 @@ Item {
 
             // Les étapes gardent leur place une fois cochées (tri du modèle) : la
             // séquence « démonter, poncer, repeindre » reste lisible telle quelle.
+            // Un tap sur le texte ouvre le menu de l'étape (échéance, agenda, retrait).
             Repeater {
                 model: AppController.steps
 
                 delegate: Rectangle {
+                    id: stepRow
                     Layout.fillWidth: true
-                    implicitHeight: 52
+                    implicitHeight: model.due > 0 ? 58 : 52
                     radius: 12
                     color: Theme.surface
                     border.color: Theme.outline
@@ -394,14 +474,40 @@ Item {
                             }
                         }
 
-                        Label {
+                        ColumnLayout {
                             Layout.fillWidth: true
                             Layout.leftMargin: 4
-                            text: model.name
-                            color: model.done ? Theme.textDim : Theme.text
-                            font.pixelSize: 15
-                            font.strikeout: model.done
-                            elide: Text.ElideRight
+                            Layout.alignment: Qt.AlignVCenter
+                            spacing: 1
+
+                            Label {
+                                Layout.fillWidth: true
+                                text: model.name
+                                color: model.done ? Theme.textDim : Theme.text
+                                font.pixelSize: 15
+                                font.strikeout: model.done
+                                elide: Text.ElideRight
+                            }
+
+                            Label {
+                                Layout.fillWidth: true
+                                visible: model.due > 0
+                                text: root.dueText(model.due)
+                                color: root.isOverdue(model.due) && !model.done
+                                       ? Theme.danger : Theme.textDim
+                                font.pixelSize: 12
+                                elide: Text.ElideRight
+                            }
+
+                            // Le texte de l'étape est la poignée de son menu.
+                            TapHandler {
+                                onTapped: {
+                                    stepMenu.stepId   = model.itemId
+                                    stepMenu.stepName = model.name
+                                    stepMenu.stepDue  = model.due
+                                    stepMenu.popup()
+                                }
+                            }
                         }
 
                         ToolButton {
@@ -502,6 +608,47 @@ Item {
                 anchors.fill: parent
                 onClicked: photoViewer.close()
             }
+        }
+    }
+
+    // Menu d'une étape : son échéance, l'agenda, sa suppression.
+    ColoMenu {
+        id: stepMenu
+        property string stepId: ""
+        property string stepName: ""
+        property real   stepDue: 0
+
+        MenuItem {
+            text: stepMenu.stepDue > 0 ? "Modifier l'échéance" : "Ajouter une échéance"
+            onTriggered: {
+                dueDialog.targetStep = stepMenu.stepId
+                dueDialog.openFor(stepMenu.stepDue)
+            }
+        }
+        MenuItem {
+            text: "Ajouter à l'agenda"
+            enabled: stepMenu.stepDue > 0
+            onTriggered: AppController.addToCalendar(
+                             stepMenu.stepName + " — " + root.pageTitle, "",
+                             stepMenu.stepDue)
+        }
+        MenuSeparator {}
+        MenuItem {
+            text: "Supprimer l'étape"
+            onTriggered: AppController.steps.removeItem(stepMenu.stepId)
+        }
+    }
+
+    // Un seul dialogue d'échéance pour la tâche ET ses étapes : `targetStep` dit
+    // à qui la date choisie s'applique ("" = la tâche).
+    DueDialog {
+        id: dueDialog
+        property string targetStep: ""
+        onPicked: function (ms) {
+            if (targetStep.length > 0)
+                AppController.steps.setDue(targetStep, ms)
+            else
+                AppController.items.setDue(root.itemId, ms)
         }
     }
 

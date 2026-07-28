@@ -131,6 +131,7 @@ set(COLO_QML_FILES
     qml/HistoryPage.qml
     qml/ShareSheet.qml
     qml/ColoDialog.qml
+    qml/DueDialog.qml
     qml/ColoMenu.qml
     qml/ColoTextField.qml
     qml/AisleBox.qml

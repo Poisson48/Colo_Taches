@@ -238,6 +238,7 @@ QVariant ItemModel::data(const QModelIndex &index, int role) const {
     case CreatedRole: return static_cast<qlonglong>(row.item.created);
     case AisleRole:   return QString::fromStdString(row.item.aisle);
     case ImageRole:   return QString::fromStdString(row.item.image);
+    case DueRole:     return static_cast<qlonglong>(row.item.due);
     case StepsTotalRole: {
         const auto it = m_stepCounts.find(row.item.itemId);
         return it != m_stepCounts.end() ? it->second.first : 0;
@@ -274,6 +275,7 @@ QHash<int, QByteArray> ItemModel::roleNames() const {
         { ImageRole,   "image"   },
         { StepsTotalRole, "stepsTotal" },
         { StepsDoneRole,  "stepsDone"  },
+        { DueRole,     "due"     },
     };
 }
 
@@ -290,6 +292,7 @@ QVariantMap ItemModel::get(const QString &itemId) const {
     m.insert(QStringLiteral("note"),    QString::fromStdString(it->note));
     m.insert(QStringLiteral("aisle"),   QString::fromStdString(it->aisle));
     m.insert(QStringLiteral("image"),   QString::fromStdString(it->image));
+    m.insert(QStringLiteral("due"),     static_cast<qlonglong>(it->due));
     m.insert(QStringLiteral("done"),    it->done);
     m.insert(QStringLiteral("doneAt"),  static_cast<qlonglong>(it->doneAt));
     m.insert(QStringLiteral("created"), static_cast<qlonglong>(it->created));
@@ -558,6 +561,35 @@ void ItemModel::editItem(const QString &itemId, const QString &name,
         m_rows[static_cast<size_t>(pos)].item = *it;
         const QModelIndex idx = index(pos);
         emit dataChanged(idx, idx, { NameRole, QtyRole, NoteRole });
+    }
+    emit refreshed();
+}
+
+void ItemModel::setDue(const QString &itemId, double dueMs) {
+    if (!m_db) return;
+
+    const std::string id  = itemId.toStdString();
+    const int64_t     due = static_cast<int64_t>(dueMs);
+
+    auto it = std::find_if(m_items.begin(), m_items.end(),
+                           [&](const core::Item &i){ return i.itemId == id; });
+    if (it == m_items.end() || it->due == due) return;
+
+    const int64_t lamport = m_db->bumpLamport(m_listId);
+    it->due     = due;
+    it->dueVer  = { lamport, m_deviceId };
+    it->touched = QDateTime::currentMSecsSinceEpoch();
+
+    if (!m_db->upsertItem(*it)) return;
+
+    emit localChanged(m_listId);
+
+    // L'échéance n'entre pas dans le tri : la ligne ne bouge pas.
+    const int pos = findRow(itemId);
+    if (pos >= 0) {
+        m_rows[static_cast<size_t>(pos)].item = *it;
+        const QModelIndex idx = index(pos);
+        emit dataChanged(idx, idx, { DueRole });
     }
     emit refreshed();
 }

@@ -1144,6 +1144,47 @@ private slots:
         QCOMPARE(model.data(model.index(0), ItemModel::ImageRole).toString(), QString());
     }
 
+    // L'échéance est facultative : posée, changée, retirée — champ LWW versionné,
+    // valable pour une tâche comme pour une étape.
+    void test_setDue() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        Database db;
+        QVERIFY(openDb(db, dir));
+        const auto listId = makeList(db);
+
+        ItemModel model;
+        model.load(db, listId, "dev-A");
+        model.addItem("Tondre", "");
+        const QString id = model.data(model.index(0), ItemModel::ItemIdRole).toString();
+        QCOMPARE(model.data(model.index(0), ItemModel::DueRole).toLongLong(), int64_t(0));
+
+        QSignalSpy localSpy(&model, &ItemModel::localChanged);
+        model.setDue(id, 1722000000000.0);
+        QCOMPARE(localSpy.count(), 1);
+        QCOMPARE(model.data(model.index(0), ItemModel::DueRole).toLongLong(),
+                 int64_t(1722000000000LL));
+
+        // Persistée et versionnée : elle part au relais comme les autres champs.
+        for (const auto &it : db.getItems(listId)) {
+            QCOMPARE(it.due, int64_t(1722000000000LL));
+            QVERIFY(it.dueVer.lamport > 0);
+        }
+
+        // Une étape aussi peut porter une échéance.
+        ItemModel steps;
+        steps.load(db, listId, "dev-A", id.toStdString());
+        steps.addItem("Sortir la tondeuse", "");
+        const QString stepId = steps.data(steps.index(0), ItemModel::ItemIdRole).toString();
+        steps.setDue(stepId, 1722100000000.0);
+        QCOMPARE(steps.data(steps.index(0), ItemModel::DueRole).toLongLong(),
+                 int64_t(1722100000000LL));
+
+        // Retirer l'échéance : retour à 0, version qui avance.
+        model.setDue(id, 0);
+        QCOMPARE(model.data(model.index(0), ItemModel::DueRole).toLongLong(), int64_t(0));
+    }
+
     // L'historique consigne chaque tâche faite — et survit à son retrait de la liste.
     void test_history() {
         QTemporaryDir dir;

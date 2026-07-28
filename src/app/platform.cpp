@@ -103,6 +103,22 @@ void platformKeepScreenOn(bool on)
         "(Landroid/content/Context;Z)V", ctx.object(), static_cast<jboolean>(on));
 }
 
+bool platformAddCalendarEvent(const QString& title, const QString& description,
+                              qint64 startMs)
+{
+    const QJniObject ctx = androidContext();
+    if (!ctx.isValid())
+        return false;
+
+    const QJniObject jTitle = QJniObject::fromString(title);
+    const QJniObject jDesc  = QJniObject::fromString(description);
+    return QJniObject::callStaticMethod<jboolean>(
+        kPlatformClass, "addCalendarEvent",
+        "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;J)Z",
+        ctx.object(), jTitle.object<jstring>(), jDesc.object<jstring>(),
+        static_cast<jlong>(startMs));
+}
+
 #else // !Q_OS_ANDROID
 
 void initNotifications() {}
@@ -116,6 +132,8 @@ bool platformInstallApk(const QString&) { return false; }
 void platformVibrate(int) {}
 
 void platformKeepScreenOn(bool) {}
+
+bool platformAddCalendarEvent(const QString&, const QString&, qint64) { return false; }
 
 #endif
 

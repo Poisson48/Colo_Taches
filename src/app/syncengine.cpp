@@ -390,6 +390,7 @@ void SyncEngine::onRelayEvent(const net::NostrEvent& ev)
                                item.noteVer.lamport,
                                item.aisleVer.lamport,
                                item.imageVer.lamport,
+                               item.dueVer.lamport,
                                item.orderVer.lamport,
                                item.doneVer.lamport,
                                item.delVer.lamport});

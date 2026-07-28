@@ -26,8 +26,14 @@ bool platformInstallApk(const QString& apkPath);
 // Vibration courte : confirmer un cochage sans avoir à regarder l'écran.
 void platformVibrate(int ms);
 
-// Empêche l'écran de s'éteindre (mode Courses : on tient le téléphone d'une main,
-// dans un rayon, sans le toucher pendant des minutes).
+// Empêche l'écran de s'éteindre (mode Chantier : le téléphone posé à côté,
+// les mains prises, sans le toucher pendant des minutes).
 void platformKeepScreenOn(bool on);
+
+// Propose l'ajout d'un événement « journée entière » à l'agenda du téléphone
+// (ACTION_INSERT : l'app d'agenda s'ouvre pré-remplie, l'utilisateur confirme).
+// false hors Android → l'appelant retombe sur un fichier .ics.
+bool platformAddCalendarEvent(const QString& title, const QString& description,
+                              qint64 startMs);
 
 } // namespace app

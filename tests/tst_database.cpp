@@ -659,6 +659,8 @@ private slots:
         core::Item task = makeItem("list-A", "task-1", "Repeindre");
         task.image    = "sha-abc";
         task.imageVer = {3, "dev-A"};
+        task.due      = 1722000000000LL;
+        task.dueVer   = {4, "dev-A"};
         QVERIFY(db.upsertItem(task));
 
         core::Item step = makeItem("list-A", "step-1", "Poncer");
@@ -671,6 +673,8 @@ private slots:
             if (it.itemId == "task-1") {
                 QCOMPARE(it.image, std::string("sha-abc"));
                 QCOMPARE(it.imageVer.lamport, int64_t(3));
+                QCOMPARE(it.due, int64_t(1722000000000LL));
+                QCOMPARE(it.dueVer.lamport, int64_t(4));
                 QCOMPARE(it.parentId, std::string(""));
             } else {
                 QCOMPARE(it.parentId, std::string("task-1"));

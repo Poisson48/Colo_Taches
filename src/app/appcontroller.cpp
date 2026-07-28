@@ -6,6 +6,7 @@
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDebug>
+#include <QDesktopServices>
 #include <QDir>
 #include <QGuiApplication>
 #include <QImage>
@@ -533,6 +534,8 @@ void AppController::duplicateList(const QString &listId, const QString &title) {
             // La photo suit : le blob est adressé par contenu, il est déjà en base.
             item.image    = src.image;
             item.imageVer = ver;
+            item.due      = src.due;   // l'échéance aussi
+            item.dueVer   = ver;
             item.order    = src.order;   // la copie garde le classement de l'originale
             item.orderVer = ver;
             item.done    = false;
@@ -607,6 +610,8 @@ void AppController::importListInto(const QString &destListId, const QString &sou
             item.aisleVer = ver;
             item.image    = src.image;   // blob adressé par contenu, déjà en base
             item.imageVer = ver;
+            item.due      = src.due;
+            item.dueVer   = ver;
             item.order    = now + copied;  // à la suite des tâches déjà dans la destination
             item.orderVer = ver;
             item.done    = false;          // recopiées « à faire »
@@ -1227,6 +1232,57 @@ bool AppController::setTaskImage(const QString &itemId, const QUrl &fileUrl) {
 void AppController::removeTaskImage(const QString &itemId, const QString &sha) {
     // La photo sort de la liste (LWW) ; le blob orphelin sera purgé au démarrage.
     m_itemModel.removeItemImage(itemId, sha);
+}
+
+// ---------------------------------------------------------------------------
+// Agenda
+// ---------------------------------------------------------------------------
+
+void AppController::addToCalendar(const QString &name, const QString &note, double dueMs) {
+    const qint64 start = static_cast<qint64>(dueMs);
+    if (name.trimmed().isEmpty() || start <= 0) return;
+
+    const QString description = note.trimmed().isEmpty()
+        ? QStringLiteral("Colo Tâches")
+        : note.trimmed() + QStringLiteral("\n(Colo Tâches)");
+
+    // Android : l'app d'agenda s'ouvre pré-remplie, l'utilisateur confirme.
+    if (platformAddCalendarEvent(name, description, start))
+        return;
+
+    // Desktop : un .ics « journée entière » ouvert par l'application par défaut
+    // (agenda, Thunderbird…). Format minimal, suffisant pour tous les clients.
+    const QDate day = QDateTime::fromMSecsSinceEpoch(start).date();
+    const QString ics = QStringLiteral(
+        "BEGIN:VCALENDAR\r\n"
+        "VERSION:2.0\r\n"
+        "PRODID:-//ColoTaches//FR\r\n"
+        "BEGIN:VEVENT\r\n"
+        "UID:%1@colotaches\r\n"
+        "DTSTAMP:%2\r\n"
+        "DTSTART;VALUE=DATE:%3\r\n"
+        "SUMMARY:%4\r\n"
+        "DESCRIPTION:%5\r\n"
+        "END:VEVENT\r\n"
+        "END:VCALENDAR\r\n")
+        .arg(QUuid::createUuid().toString(QUuid::WithoutBraces),
+             QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd'T'HHmmss'Z'")),
+             day.toString(QStringLiteral("yyyyMMdd")),
+             QString(name).replace(QLatin1Char('\n'), QLatin1Char(' ')),
+             QString(description).replace(QStringLiteral("\n"), QStringLiteral("\\n")));
+
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    const QString path = dir + QStringLiteral("/colotaches-echeance.ics");
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        emit toast(QStringLiteral("Impossible de préparer l'événement d'agenda"));
+        return;
+    }
+    f.write(ics.toUtf8());
+    f.close();
+
+    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(path)))
+        emit toast(QStringLiteral("Aucune application d'agenda trouvée"));
 }
 
 // ---------------------------------------------------------------------------
