@@ -173,6 +173,12 @@ Item {
             text: "Rechercher"
             onTriggered: root.searchOpen = true
         }
+        // Ce qui a déjà été fait, et par qui — y compris les tâches retirées depuis.
+        MenuItem {
+            text: "Historique"
+            onTriggered: root.StackView.view.push(historyPageComponent,
+                                                  { listId: root.listId })
+        }
         // Sans ces deux-là, les tâches cochées restent barrées à l'écran pour
         // toujours, et il faut les traiter une par une.
         MenuItem {
@@ -478,8 +484,8 @@ Item {
                             }
                         }
 
-                        // Vignette de la photo, si la tâche en a une et que le blob est
-                        // déjà arrivé (sinon rien, jusqu'à la prochaine révision).
+                        // Vignette de la première photo, si la tâche en a et que le
+                        // blob est déjà arrivé (sinon rien, jusqu'à la prochaine révision).
                         Image {
                             Layout.preferredWidth: visible ? 40 : 0
                             Layout.preferredHeight: 40
@@ -487,7 +493,8 @@ Item {
                             Layout.alignment: Qt.AlignVCenter
                             visible: model.image.length > 0 && status === Image.Ready
                             source: model.image.length > 0
-                                    ? "image://taskimg/" + model.image + "?r=" + AppController.imageRevision
+                                    ? "image://taskimg/" + model.image.split(" ")[0]
+                                      + "?r=" + AppController.imageRevision
                                     : ""
                             sourceSize.width: 80
                             sourceSize.height: 80
@@ -850,6 +857,11 @@ Item {
     Component {
         id: taskPageComponent
         TaskPage {}
+    }
+
+    Component {
+        id: historyPageComponent
+        HistoryPage {}
     }
 
     function addItem() {

@@ -15,38 +15,38 @@
     <!-- Ligne 1 : cochée -->
     <path
         android:pathData="M36,40 l4,4 l7,-8"
-        android:strokeColor="#2E7D32"
+        android:strokeColor="#C62828"
         android:strokeWidth="3.5"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
     <path
         android:pathData="M53,40 h18"
-        android:strokeColor="#2E7D32"
+        android:strokeColor="#C62828"
         android:strokeWidth="3.5"
         android:strokeLineCap="round"/>
 
     <!-- Ligne 2 : cochée -->
     <path
         android:pathData="M36,54 l4,4 l7,-8"
-        android:strokeColor="#2E7D32"
+        android:strokeColor="#C62828"
         android:strokeWidth="3.5"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"/>
     <path
         android:pathData="M53,54 h18"
-        android:strokeColor="#2E7D32"
+        android:strokeColor="#C62828"
         android:strokeWidth="3.5"
         android:strokeLineCap="round"/>
 
     <!-- Ligne 3 : à faire (case vide) -->
     <path
         android:pathData="M36,64 h9 v9 h-9 z"
-        android:strokeColor="#81C784"
+        android:strokeColor="#E57373"
         android:strokeWidth="3"
         android:strokeLineJoin="round"/>
     <path
         android:pathData="M53,68 h18"
-        android:strokeColor="#81C784"
+        android:strokeColor="#E57373"
         android:strokeWidth="3.5"
         android:strokeLineCap="round"/>
 </vector>

@@ -17,6 +17,11 @@ Item {
 
     readonly property string pageTitle: task && task.name ? task.name : "Tâche"
 
+    // Les photos de la tâche, dans l'ordre d'ajout : « avant » puis « après ».
+    readonly property var photoShas: task && task.image && task.image.length > 0
+                                     ? task.image.split(" ").filter(s => s.length > 0)
+                                     : []
+
     Connections {
         target: AppController.items
         function onRefreshed() {
@@ -59,14 +64,8 @@ Item {
             onTriggered: editDialog.openFor(root.task)
         }
         MenuItem {
-            text: root.task && root.task.image && root.task.image.length > 0
-                  ? "Remplacer la photo" : "Ajouter une photo"
+            text: "Ajouter une photo"
             onTriggered: root.pickPhoto()
-        }
-        MenuItem {
-            text: "Retirer la photo"
-            enabled: root.task && root.task.image && root.task.image.length > 0
-            onTriggered: AppController.removeTaskImage(root.itemId)
         }
         MenuSeparator {}
         MenuItem {
@@ -216,55 +215,85 @@ Item {
                 }
             }
 
-            // --- Photo ---
-            Rectangle {
-                Layout.fillWidth: true
-                visible: root.task && root.task.image && root.task.image.length > 0
-                implicitHeight: photo.status === Image.Ready
-                                ? photo.paintedHeight + 2 : 120
-                radius: 12
-                clip: true
-                color: Theme.surfaceHigh
-                border.color: Theme.outline
-                border.width: 1
+            // --- Photos (plusieurs : l'état avant, le résultat après…) ---
+            Repeater {
+                model: root.photoShas
 
-                Image {
-                    id: photo
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.top: parent.top
-                    anchors.topMargin: 1
-                    width: parent.width - 2
-                    source: root.task && root.task.image && root.task.image.length > 0
-                            ? "image://taskimg/" + root.task.image
-                              + "?r=" + AppController.imageRevision
-                            : ""
-                    fillMode: Image.PreserveAspectFit
-                    asynchronous: true
-                }
+                delegate: Rectangle {
+                    id: photoCard
+                    required property string modelData
+                    required property int index
 
-                // Blob pas encore reçu d'un relais : le dire, plutôt qu'un cadre vide.
-                Label {
-                    anchors.centerIn: parent
-                    visible: photo.status !== Image.Ready
-                    text: "Photo en cours de réception…"
-                    color: Theme.textDim
-                    font.pixelSize: 13
-                }
+                    Layout.fillWidth: true
+                    implicitHeight: photo.status === Image.Ready
+                                    ? photo.paintedHeight + 2 : 110
+                    radius: 12
+                    clip: true
+                    color: Theme.surfaceHigh
+                    border.color: Theme.outline
+                    border.width: 1
 
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: if (photo.status === Image.Ready) photoViewer.open()
+                    Image {
+                        id: photo
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.top: parent.top
+                        anchors.topMargin: 1
+                        width: parent.width - 2
+                        source: "image://taskimg/" + photoCard.modelData
+                                + "?r=" + AppController.imageRevision
+                        fillMode: Image.PreserveAspectFit
+                        asynchronous: true
+                    }
+
+                    // Blob pas encore reçu d'un relais : le dire, plutôt qu'un cadre vide.
+                    Label {
+                        anchors.centerIn: parent
+                        visible: photo.status !== Image.Ready
+                        text: "Photo en cours de réception…"
+                        color: Theme.textDim
+                        font.pixelSize: 13
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            if (photo.status === Image.Ready)
+                                photoViewer.openFor(photoCard.modelData)
+                        }
+                    }
+
+                    // Retirer CETTE photo (les autres restent) : croix discrète.
+                    ToolButton {
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.margins: 4
+                        implicitWidth: 34
+                        implicitHeight: 34
+                        background: Rectangle {
+                            radius: width / 2
+                            color: Qt.rgba(0, 0, 0, 0.45)
+                        }
+                        contentItem: Icon {
+                            name: "close"
+                            color: "white"
+                            size: 13
+                        }
+                        onClicked: {
+                            removePhotoDialog.sha = photoCard.modelData
+                            removePhotoDialog.open()
+                        }
+                    }
                 }
             }
 
-            // Pas encore de photo : proposer d'en mettre une, sans passer par le menu.
+            // Toujours proposer une photo de plus : l'avant appelle son après.
             Button {
                 Layout.fillWidth: true
-                visible: !(root.task && root.task.image && root.task.image.length > 0)
                 flat: true
                 implicitHeight: Theme.touchTarget
                 contentItem: Label {
-                    text: "＋  Ajouter une photo"
+                    text: root.photoShas.length > 0 ? "＋  Ajouter une autre photo"
+                                                    : "＋  Ajouter une photo"
                     color: Theme.accent
                     font.pixelSize: 14
                     horizontalAlignment: Text.AlignHCenter
@@ -451,13 +480,19 @@ Item {
         modal: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
+        property string sha: ""
+        function openFor(s) { sha = s; open() }
+
         background: Rectangle { color: Qt.rgba(0, 0, 0, 0.92) }
 
         contentItem: Item {
             Image {
                 anchors.fill: parent
                 anchors.margins: 8
-                source: photo.source
+                source: photoViewer.sha.length > 0
+                        ? "image://taskimg/" + photoViewer.sha
+                          + "?r=" + AppController.imageRevision
+                        : ""
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true
             }
@@ -471,6 +506,26 @@ Item {
     }
 
     // --- Dialogues ---
+
+    ColoDialog {
+        id: removePhotoDialog
+        title: "Retirer cette photo ?"
+        acceptText: "Retirer"
+        destructive: true
+
+        property string sha: ""
+
+        Label {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            color: Theme.textDim
+            font.pixelSize: 14
+            text: "La photo sera retirée de la tâche, pour tout le monde. "
+                  + "Les autres photos ne bougent pas."
+        }
+
+        onAccepted: AppController.removeTaskImage(root.itemId, removePhotoDialog.sha)
+    }
 
     ColoDialog {
         id: editDialog

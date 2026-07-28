@@ -358,7 +358,7 @@ private slots:
 
         QSignalSpy imgSpyB(B.engine.get(), &SyncEngine::imageArrived);
 
-        A.model->setItemImage(itemId, "sha-test");
+        A.model->addItemImage(itemId, "sha-test");
         A.engine->onLocalChange(listId);
         A.engine->publishImage(listId, "sha-test");
         waitMs(500);

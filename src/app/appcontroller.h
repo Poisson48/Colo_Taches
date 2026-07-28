@@ -151,12 +151,18 @@ public slots:
     void openTask(const QString &itemId);
     void closeTask();
 
-    // --- Photo d'une tâche ---
-    // Attache une image : lecture, réduction (JPEG ≤ ~30 Ko pour passer les relais),
-    // stockage local, écriture du champ CRDT et publication du blob. false si le
-    // fichier est illisible.
+    // --- Photos d'une tâche (plusieurs : avant, après…) ---
+    // Ajoute une image : lecture, réduction (JPEG ≤ ~30 Ko pour passer les relais),
+    // stockage local, ajout à la liste du champ CRDT et publication du blob. false
+    // si le fichier est illisible.
     bool setTaskImage(const QString &itemId, const QUrl &fileUrl);
-    void removeTaskImage(const QString &itemId);
+    // Retire UNE photo de la tâche (les autres restent).
+    void removeTaskImage(const QString &itemId, const QString &sha);
+
+    // --- Historique (local) : ce qui a déjà été fait dans une liste ---
+    // [{ name, aisle, doneAt, byName }, …], le plus récent d'abord.
+    QVariantList history(const QString &listId);
+    void clearHistory(const QString &listId);
     // Parse URI → create list with provided key → true on success
     bool joinList(const QString &uri);
     // Build pairing URI for an existing list

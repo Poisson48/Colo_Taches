@@ -40,7 +40,7 @@ Chaque champ porte sa propre version :
 | `qty` | string (≤ 50 chars) | hérité du protocole Colo_Course, non exposé dans l'UI |
 | `note` | string (libre) | détails de la tâche |
 | `aisle` | string (libellé de la catégorie, "" = non classé) | catégorie (Ménage, Jardin…) |
-| `image` | string (sha256 hex du blob JPEG, "" = pas de photo) | photo de la tâche |
+| `image` | string : shas256 hex des blobs JPEG séparés par des espaces ("" = aucune) | photos de la tâche (avant, après…), dans l'ordre d'ajout |
 | `order` | int64 | position manuelle dans son groupe |
 | `done` | bool | coché = fait |
 | `del` | bool | tombstone (supprimé) |
@@ -50,11 +50,18 @@ de premier niveau). Fixé à la création comme `created`/`by`, jamais versionn�
 une étape ne change jamais de tâche. Supprimer une tâche pose aussi le tombstone de
 chacune de ses étapes (cascade côté client, répliquée comme n'importe quel `del`).
 
-Le blob de la photo ne circule PAS dans les deltas : il voyage dans un événement `img`
-dédié (§4), adressé par contenu (le sha du champ `image`). L'ordre d'arrivée est
-indifférent — l'UI affiche la photo dès que le champ ET le blob sont là. Le blob est
-un JPEG ≤ ~30 Ko (réduit à l'attache) : deux couches de base64 (payload puis contenu
-chiffré) gonflent d'un facteur ~1,8, et les relais publics coupent vers 64 Ko.
+Les blobs des photos ne circulent PAS dans les deltas : chacun voyage dans un
+événement `img` dédié (§4), adressé par contenu (un sha de la liste du champ `image`).
+L'ordre d'arrivée est indifférent — l'UI affiche chaque photo dès que le champ ET son
+blob sont là. Un blob est un JPEG ≤ ~30 Ko (réduit à l'attache) : deux couches de
+base64 (payload puis contenu chiffré) gonflent d'un facteur ~1,8, et les relais
+publics coupent vers 64 Ko. La liste entière est UN champ LWW : deux ajouts
+simultanés sur deux appareils → le dernier gagne (perte d'une photo acceptée, rare).
+
+**Historique (local)** : chaque tâche passée à « fait » — localement ou par merge
+distant — est consignée dans la table `history` (nom, catégorie, date, auteur).
+Purement local, jamais synchronisé, non purgé par le GC : la trace survit au retrait
+de la tâche. Dédup par (liste, item, date de cochage).
 
 `aisle` porte le libellé lui-même, pas un identifiant : un pair qui ne connaît pas un
 rayon (version plus récente en face) l'affiche quand même et ne perd rien. L'ordre

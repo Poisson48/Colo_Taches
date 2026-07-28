@@ -451,6 +451,14 @@ void ItemModel::toggleDone(const QString &itemId) {
 
     if (!m_db->upsertItem(*it)) return;
 
+    // Historique : chaque tâche (pas les étapes) cochée ici laisse une trace locale
+    // durable — elle survivra à « Retirer les tâches faites ». « vous » : c'est ce
+    // que l'UI affiche pour soi-même partout ailleurs.
+    if (it->done && it->parentId.empty()) {
+        m_db->appendHistory(m_listId,
+                            { it->itemId, it->name, it->aisle, now, "vous" });
+    }
+
     emit localChanged(m_listId);
     emit aisleNamesChanged();
 
@@ -554,18 +562,18 @@ void ItemModel::editItem(const QString &itemId, const QString &name,
     emit refreshed();
 }
 
-void ItemModel::setItemImage(const QString &itemId, const QString &sha) {
-    if (!m_db) return;
-
+// Écrit la nouvelle liste de photos (LWW sur le champ entier : deux ajouts
+// simultanés sur deux appareils → le dernier gagne, comme pour tout champ).
+void ItemModel::writeImageList(const QString &itemId, const QStringList &shas) {
     const std::string id     = itemId.toStdString();
-    const std::string newSha = sha.toStdString();
+    const std::string joined = shas.join(QLatin1Char(' ')).toStdString();
 
     auto it = std::find_if(m_items.begin(), m_items.end(),
                            [&](const core::Item &i){ return i.itemId == id; });
-    if (it == m_items.end() || it->image == newSha) return;
+    if (it == m_items.end() || it->image == joined) return;
 
     const int64_t lamport = m_db->bumpLamport(m_listId);
-    it->image    = newSha;
+    it->image    = joined;
     it->imageVer = { lamport, m_deviceId };
     it->touched  = QDateTime::currentMSecsSinceEpoch();
 
@@ -573,7 +581,7 @@ void ItemModel::setItemImage(const QString &itemId, const QString &sha) {
 
     emit localChanged(m_listId);
 
-    // L'image n'entre pas dans le tri : la ligne ne bouge pas.
+    // Les photos n'entrent pas dans le tri : la ligne ne bouge pas.
     const int pos = findRow(itemId);
     if (pos >= 0) {
         m_rows[static_cast<size_t>(pos)].item = *it;
@@ -581,6 +589,30 @@ void ItemModel::setItemImage(const QString &itemId, const QString &sha) {
         emit dataChanged(idx, idx, { ImageRole });
     }
     emit refreshed();
+}
+
+QStringList ItemModel::imageList(const QString &itemId) const {
+    const std::string id = itemId.toStdString();
+    const auto it = std::find_if(m_items.begin(), m_items.end(),
+                                 [&](const core::Item &i){ return i.itemId == id; });
+    if (it == m_items.end()) return {};
+    return QString::fromStdString(it->image)
+        .split(QLatin1Char(' '), Qt::SkipEmptyParts);
+}
+
+void ItemModel::addItemImage(const QString &itemId, const QString &sha) {
+    if (!m_db || sha.trimmed().isEmpty()) return;
+    QStringList shas = imageList(itemId);
+    if (shas.contains(sha)) return;   // même contenu → même photo, rien à faire
+    shas.append(sha);
+    writeImageList(itemId, shas);
+}
+
+void ItemModel::removeItemImage(const QString &itemId, const QString &sha) {
+    if (!m_db) return;
+    QStringList shas = imageList(itemId);
+    if (!shas.removeAll(sha)) return;
+    writeImageList(itemId, shas);
 }
 
 void ItemModel::removeItems(const QStringList &itemIds) {

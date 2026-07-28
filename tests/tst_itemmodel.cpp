@@ -1107,8 +1107,9 @@ private slots:
         QCOMPARE(tombstones, 4);   // la tâche + ses 3 étapes
     }
 
-    // La photo d'une tâche : champ LWW écrit par setItemImage, exposé par ImageRole.
-    void test_itemImage() {
+    // Les photos d'une tâche : liste de shas dans le champ LWW `image`, dans l'ordre
+    // d'ajout (« avant » puis « après »), exposée par ImageRole.
+    void test_itemImages() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
         Database db;
@@ -1122,20 +1123,70 @@ private slots:
         QCOMPARE(model.data(model.index(0), ItemModel::ImageRole).toString(), QString());
 
         QSignalSpy localSpy(&model, &ItemModel::localChanged);
-        model.setItemImage(id, "cafe1234");
-        QCOMPARE(localSpy.count(), 1);
+        model.addItemImage(id, "sha-avant");
+        model.addItemImage(id, "sha-apres");
+        model.addItemImage(id, "sha-avant");   // doublon : sans effet
+        QCOMPARE(localSpy.count(), 2);
         QCOMPARE(model.data(model.index(0), ItemModel::ImageRole).toString(),
-                 QStringLiteral("cafe1234"));
+                 QStringLiteral("sha-avant sha-apres"));
 
         // Persisté et versionné : le champ part au relais comme les autres.
         for (const auto &it : db.getItems(listId)) {
-            QCOMPARE(it.image, std::string("cafe1234"));
+            QCOMPARE(it.image, std::string("sha-avant sha-apres"));
             QVERIFY(it.imageVer.lamport > 0);
         }
 
-        // Retirer la photo : champ vide, version qui avance.
-        model.setItemImage(id, "");
+        // Retirer UNE photo : l'autre reste, la version avance.
+        model.removeItemImage(id, "sha-avant");
+        QCOMPARE(model.data(model.index(0), ItemModel::ImageRole).toString(),
+                 QStringLiteral("sha-apres"));
+        model.removeItemImage(id, "sha-apres");
         QCOMPARE(model.data(model.index(0), ItemModel::ImageRole).toString(), QString());
+    }
+
+    // L'historique consigne chaque tâche faite — et survit à son retrait de la liste.
+    void test_history() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        Database db;
+        QVERIFY(openDb(db, dir));
+        const auto listId = makeList(db);
+
+        ItemModel model;
+        model.load(db, listId, "dev-A");
+        model.addItem("Sortir les poubelles", "", "", "Ménage");
+        const QString id = model.data(model.index(0), ItemModel::ItemIdRole).toString();
+
+        // Une étape cochée ne pollue pas l'historique des tâches.
+        ItemModel steps;
+        steps.load(db, listId, "dev-A", id.toStdString());
+        steps.addItem("Sac jaune", "");
+        const QString stepId = steps.data(steps.index(0), ItemModel::ItemIdRole).toString();
+        steps.toggleDone(stepId);
+        QCOMPARE(db.getHistory(listId, 10).size(), size_t(0));
+
+        model.toggleDone(id);
+        auto hist = db.getHistory(listId, 10);
+        QCOMPARE(hist.size(), size_t(1));
+        QCOMPARE(hist.front().name,   std::string("Sortir les poubelles"));
+        QCOMPARE(hist.front().aisle,  std::string("Ménage"));
+        QCOMPARE(hist.front().byName, std::string("vous"));
+        QVERIFY(hist.front().doneAt > 0);
+
+        // Décocher n'ajoute rien ; recocher fait une seconde entrée (autre date).
+        // La clé de dédup est (item, date en ms) : laisser passer une milliseconde.
+        model.toggleDone(id);
+        QCOMPARE(db.getHistory(listId, 10).size(), size_t(1));
+        QTest::qWait(2);
+        model.toggleDone(id);
+        QCOMPARE(db.getHistory(listId, 10).size(), size_t(2));
+
+        // La trace survit au retrait de la tâche.
+        model.removeItem(id);
+        QCOMPARE(db.getHistory(listId, 10).size(), size_t(2));
+
+        QVERIFY(db.clearHistory(listId));
+        QCOMPARE(db.getHistory(listId, 10).size(), size_t(0));
     }
 };
 

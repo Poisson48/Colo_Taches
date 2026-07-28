@@ -406,6 +406,11 @@ void SyncEngine::onRelayEvent(const net::NostrEvent& ev)
     std::map<std::string, core::Item> localMap;
     for (auto& it : localItems) localMap[it.itemId] = it;
 
+    // État « fait » d'avant merge : c'est la transition (pas l'état) qui alimente
+    // l'historique — une tâche déjà connue faite ne doit pas s'y consigner deux fois.
+    std::map<std::string, bool> wasDone;
+    for (const auto& [iid, it] : localMap) wasDone[iid] = it.done;
+
     const auto changedIds = core::mergeItems(localMap, payload.items);
 
     // Upsert changed items in DB.
@@ -475,6 +480,22 @@ void SyncEngine::onRelayEvent(const net::NostrEvent& ev)
         authorName = QString::fromStdString(payload.members.begin()->second.first);
     }
     if (authorName.isEmpty()) authorName = QStringLiteral("Quelqu'un");
+
+    // Historique : les tâches (pas les étapes) passées à « fait » par ce merge.
+    // Notre propre événement revenu du relais est ignoré (déjà consigné au cochage
+    // local — et la clé (item, date) dédoublonne de toute façon).
+    if (!ownEvent) {
+        for (const auto& iid : changedIds) {
+            const auto mit = localMap.find(iid);
+            if (mit == localMap.end()) continue;
+            const core::Item& it = mit->second;
+            if (!it.done || it.del || !it.parentId.empty() || it.doneAt <= 0) continue;
+            const auto old = wasDone.find(iid);
+            if (old != wasDone.end() && old->second) continue;   // déjà faite avant
+            m_db->appendHistory(listId,
+                { it.itemId, it.name, it.aisle, it.doneAt, authorName.toStdString() });
+        }
+    }
 
     const int count = static_cast<int>(changedIds.size());
     if (count > 0)

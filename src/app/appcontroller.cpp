@@ -1216,7 +1216,7 @@ bool AppController::setTaskImage(const QString &itemId, const QUrl &fileUrl) {
     // Champ CRDT d'abord (delta débouncé), blob ensuite (événement img direct).
     // L'ordre d'arrivée chez les pairs est indifférent : la vignette s'affiche dès
     // que le blob ET le champ sont là.
-    m_itemModel.setItemImage(itemId, sha);
+    m_itemModel.addItemImage(itemId, sha);
     m_syncEngine.publishImage(m_openListId, sha.toStdString());
 
     ++m_imageRevision;
@@ -1224,9 +1224,33 @@ bool AppController::setTaskImage(const QString &itemId, const QUrl &fileUrl) {
     return true;
 }
 
-void AppController::removeTaskImage(const QString &itemId) {
-    // Le champ repasse à "" (LWW) ; le blob orphelin sera purgé au prochain démarrage.
-    m_itemModel.setItemImage(itemId, QString());
+void AppController::removeTaskImage(const QString &itemId, const QString &sha) {
+    // La photo sort de la liste (LWW) ; le blob orphelin sera purgé au démarrage.
+    m_itemModel.removeItemImage(itemId, sha);
+}
+
+// ---------------------------------------------------------------------------
+// Historique
+// ---------------------------------------------------------------------------
+
+QVariantList AppController::history(const QString &listId) {
+    QVariantList out;
+    if (!m_db.isOpen()) return out;
+    // 500 : bien au-delà d'un an de corvées quotidiennes, sans jamais peser à l'écran.
+    for (const auto &e : m_db.getHistory(listId.toStdString(), 500)) {
+        QVariantMap m;
+        m.insert(QStringLiteral("name"),   QString::fromStdString(e.name));
+        m.insert(QStringLiteral("aisle"),  QString::fromStdString(e.aisle));
+        m.insert(QStringLiteral("doneAt"), static_cast<qlonglong>(e.doneAt));
+        m.insert(QStringLiteral("byName"), QString::fromStdString(e.byName));
+        out.append(m);
+    }
+    return out;
+}
+
+void AppController::clearHistory(const QString &listId) {
+    if (m_db.clearHistory(listId.toStdString()))
+        emit toast(QStringLiteral("Historique effacé"));
 }
 
 bool AppController::joinList(const QString &uri)

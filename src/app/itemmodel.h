@@ -46,7 +46,8 @@ public:
         // Nom du participant qui a ajouté la tâche ("vous" pour soi, vide si inconnu).
         ByNameRole,
         AisleRole,
-        // Photo de la tâche : sha256 hex du blob ("" = pas d'image).
+        // Photos de la tâche : shas256 hex des blobs, séparés par des espaces
+        // ("" = pas d'image). L'ordre est celui d'ajout (« avant » puis « après »).
         ImageRole,
         // Progression des étapes de la tâche (0/0 si elle n'en a pas).
         StepsTotalRole,
@@ -120,9 +121,11 @@ public slots:
     void editItem(const QString &itemId, const QString &name,
                   const QString &qty, const QString &note, const QString &aisle);
 
-    // Photo de la tâche : écrit le champ LWW `image` (sha du blob, déjà stocké en
-    // base par l'appelant) et publie. Sha vide = retirer la photo.
-    void setItemImage(const QString &itemId, const QString &sha);
+    // Photos de la tâche : le champ LWW `image` porte la liste des shas (séparés
+    // par des espaces), dans l'ordre d'ajout — « avant » puis « après ». Les blobs
+    // sont déjà en base (l'appelant s'en charge). Chaque écriture publie.
+    void addItemImage(const QString &itemId, const QString &sha);
+    void removeItemImage(const QString &itemId, const QString &sha);
 
     // Tout remettre à faire (la liste se refait), ou retirer ce qui est fait. Sans
     // ces deux-là, une tâche cochée reste barrée à l'écran pour toujours, et il faut
@@ -176,6 +179,10 @@ private:
     // Tombstone d'une tâche + cascade sur ses étapes (une étape sans tâche n'a plus
     // de sens, et resurgirait au merge si on ne la supprimait que localement).
     void tombstone(const std::string &itemId, const core::Ver &ver, int64_t nowMs);
+
+    // Liste des photos d'une tâche, et écriture de la liste complète (champ LWW).
+    QStringList imageList(const QString &itemId) const;
+    void writeImageList(const QString &itemId, const QStringList &shas);
 
     // Recalcule la progression des étapes par tâche (mode liste uniquement).
     void rebuildStepCounts();

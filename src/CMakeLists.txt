@@ -128,6 +128,7 @@ set(COLO_QML_FILES
     qml/ListsPage.qml
     qml/ListPage.qml
     qml/TaskPage.qml
+    qml/HistoryPage.qml
     qml/ShareSheet.qml
     qml/ColoDialog.qml
     qml/ColoMenu.qml

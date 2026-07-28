@@ -118,6 +118,18 @@ bool Database::createSchema()
             "  created INT"
             ")"),
         QStringLiteral(
+            // Historique local des tâches faites. Survit au retrait de la tâche et au
+            // GC des tombstones ; jamais synchronisé (chaque appareil garde sa trace).
+            "CREATE TABLE IF NOT EXISTS history ("
+            "  list_id TEXT,"
+            "  item_id TEXT,"
+            "  name TEXT,"
+            "  aisle TEXT,"
+            "  done_at INT,"
+            "  by_name TEXT,"
+            "  PRIMARY KEY(list_id, item_id, done_at)"
+            ")"),
+        QStringLiteral(
             "CREATE TABLE IF NOT EXISTS members ("
             "  list_id TEXT,"
             "  device_id TEXT,"
@@ -804,6 +816,67 @@ std::vector<core::Item> Database::getItems(const std::string& listId)
     return result;
 }
 
+// --- Historique ---
+
+bool Database::appendHistory(const std::string& listId, const HistoryEntry& e)
+{
+    if (e.name.empty() || e.doneAt <= 0) return false;
+    QSqlQuery q(m_db);
+    // OR IGNORE : le même cochage revenu d'un second relais ne fait pas de doublon
+    // (clé = liste + item + date de cochage).
+    q.prepare(QStringLiteral(
+        "INSERT OR IGNORE INTO history (list_id, item_id, name, aisle, done_at, by_name)"
+        " VALUES (?, ?, ?, ?, ?, ?)"));
+    q.addBindValue(qs(listId));
+    q.addBindValue(qs(e.itemId));
+    q.addBindValue(qs(e.name));
+    q.addBindValue(qs(e.aisle));
+    q.addBindValue(ll(e.doneAt));
+    q.addBindValue(qs(e.byName));
+    if (!q.exec()) {
+        qWarning() << "appendHistory error:" << q.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+std::vector<Database::HistoryEntry> Database::getHistory(const std::string& listId, int limit)
+{
+    std::vector<HistoryEntry> out;
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral(
+        "SELECT item_id, name, aisle, done_at, by_name FROM history"
+        " WHERE list_id = ? ORDER BY done_at DESC LIMIT ?"));
+    q.addBindValue(qs(listId));
+    q.addBindValue(limit);
+    if (!q.exec()) {
+        qWarning() << "getHistory error:" << q.lastError().text();
+        return out;
+    }
+    while (q.next()) {
+        HistoryEntry e;
+        e.itemId = ss(q.value(0).toString());
+        e.name   = ss(q.value(1).toString());
+        e.aisle  = ss(q.value(2).toString());
+        e.doneAt = q.value(3).toLongLong();
+        e.byName = ss(q.value(4).toString());
+        out.push_back(std::move(e));
+    }
+    return out;
+}
+
+bool Database::clearHistory(const std::string& listId)
+{
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("DELETE FROM history WHERE list_id = ?"));
+    q.addBindValue(qs(listId));
+    if (!q.exec()) {
+        qWarning() << "clearHistory error:" << q.lastError().text();
+        return false;
+    }
+    return true;
+}
+
 // --- Images ---
 
 bool Database::putImage(const std::string& sha, const QByteArray& data)
@@ -840,13 +913,17 @@ bool Database::hasImage(const std::string& sha)
     return q.exec() && q.next();
 }
 
+// Le champ `image` d'un item est une liste de shas séparés par des espaces (une
+// photo « avant », une « après »…) : l'appartenance se teste sur la liste bordée
+// d'espaces, pas par égalité.
 std::vector<std::string> Database::imagesReferenced(const std::string& listId)
 {
     std::vector<std::string> out;
     QSqlQuery q(m_db);
     q.prepare(QStringLiteral(
-        "SELECT DISTINCT i.image FROM items i JOIN images b ON b.sha = i.image"
-        " WHERE i.list_id = ? AND i.del = 0 AND i.image <> ''"));
+        "SELECT b.sha FROM images b WHERE EXISTS ("
+        "  SELECT 1 FROM items i WHERE i.list_id = ? AND i.del = 0 AND i.image <> ''"
+        "  AND instr(' ' || i.image || ' ', ' ' || b.sha || ' ') > 0)"));
     q.addBindValue(qs(listId));
     if (q.exec())
         while (q.next())
@@ -858,8 +935,9 @@ bool Database::purgeOrphanImages()
 {
     QSqlQuery q(m_db);
     if (!q.exec(QStringLiteral(
-            "DELETE FROM images WHERE sha NOT IN"
-            " (SELECT image FROM items WHERE del = 0 AND image <> '')"))) {
+            "DELETE FROM images WHERE NOT EXISTS ("
+            "  SELECT 1 FROM items i WHERE i.del = 0 AND i.image <> ''"
+            "  AND instr(' ' || i.image || ' ', ' ' || images.sha || ' ') > 0)"))) {
         qWarning() << "purgeOrphanImages error:" << q.lastError().text();
         return false;
     }
@@ -946,6 +1024,7 @@ bool Database::deleteList(const std::string& listId)
         QStringLiteral("DELETE FROM items   WHERE list_id = ?"),
         QStringLiteral("DELETE FROM members WHERE list_id = ?"),
         QStringLiteral("DELETE FROM outbox  WHERE list_id = ?"),
+        QStringLiteral("DELETE FROM history WHERE list_id = ?"),
         QStringLiteral("DELETE FROM lists   WHERE list_id = ?"),
     };
 

@@ -91,6 +91,23 @@ public:
     bool upsertItem(const core::Item& item);
     std::vector<core::Item> getItems(const std::string& listId);
 
+    // --- Historique (local : trace durable de ce qui a été fait) ---
+    // Journal purement local, jamais synchronisé ni purgé par le GC des tombstones :
+    // une tâche retirée de la liste reste dans l'historique de l'appareil.
+    struct HistoryEntry {
+        std::string itemId;
+        std::string name;
+        std::string aisle;
+        int64_t     doneAt = 0;   // ms epoch
+        std::string byName;       // nom affiché de qui l'a faite ("" = inconnu)
+    };
+    // Consigne une tâche faite. Idempotent par (item, date) : le même événement
+    // revenu d'un relais ne crée pas de doublon.
+    bool appendHistory(const std::string& listId, const HistoryEntry& e);
+    // Les plus récentes d'abord.
+    std::vector<HistoryEntry> getHistory(const std::string& listId, int limit);
+    bool clearHistory(const std::string& listId);
+
     // --- Images (blobs des photos de tâches, adressés par contenu) ---
     // Stocke un blob JPEG sous son sha256 hex. Idempotent (le contenu ne change pas
     // pour un sha donné) : ré-insérer le même blob est sans effet.

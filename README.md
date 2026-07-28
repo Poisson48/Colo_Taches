@@ -48,7 +48,8 @@ le QR code (ou le lien) aux autres — les modifications s'y synchronisent en di
 
 ### Au quotidien
 - **Étapes** : découpez une tâche (« Repeindre le volet » → démonter, poncer, repeindre) en étapes cochables. La liste affiche la progression (« 2/5 étapes »), chacun voit où en est le travail. Supprimer la tâche emporte ses étapes.
-- **Photos** : une image par tâche — la fuite à réparer, la référence à racheter. Compressée automatiquement et synchronisée chiffrée comme le reste ; tap pour l'afficher en plein écran.
+- **Photos** : plusieurs images par tâche — l'état **avant**, le résultat **après**, la référence à racheter. Compressées automatiquement et synchronisées chiffrées comme le reste ; tap pour afficher en plein écran.
+- **Historique** : chaque tâche cochée laisse une trace durable (qui, quand), même une fois retirée de la liste — de quoi voir ce qui a déjà été fait, jour par jour.
 - **Catégories** : classez les tâches (Ménage, Cuisine, Jardin, Bricolage…, ou vos propres catégories). La liste se regroupe en sections. La catégorie d'une nouvelle tâche est **pré-remplie** d'après celles déjà classées (« tondre » → Jardin) — proposée, jamais imposée. Réordonner via glisser-déposer.
 - **Favoris appris à l'usage** : les tâches récurrentes (poubelles, arrosage…) réapparaissent en pastilles sous la barre d'ajout, à remettre d'un tap.
 - **Mode Chantier** : les mains occupées, toute la ligne devient une case à cocher, une barre suit l'avancement, l'écran reste allumé et cocher fait vibrer.
