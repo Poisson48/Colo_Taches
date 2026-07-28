@@ -200,16 +200,45 @@ void ItemModel::rebuildStepCounts() {
 void ItemModel::rebuildRows() {
     beginResetModel();
     m_rows.clear();
+
+    std::vector<Row> tasks;
     for (const auto &item : m_items) {
         // La vue ne montre qu'un niveau : les tâches (parent vide), ou les étapes de
         // la tâche ouverte. m_items garde tout, y compris pour la progression.
         if (!item.del && item.parentId == m_parentId && matchesFilter(item)) {
-            m_rows.push_back(Row{ item });
+            tasks.push_back(Row{ item });
         }
     }
     const bool manual = m_manualSort, steps = stepsMode();
-    std::stable_sort(m_rows.begin(), m_rows.end(),
+    std::stable_sort(tasks.begin(), tasks.end(),
                      [=](const Row &a, const Row &b){ return rowLessThan(a, b, manual, steps); });
+
+    if (m_showSteps && !stepsMode()) {
+        // Mode « Au boulot » : chaque tâche est suivie de ses étapes, dans leur
+        // ordre manuel, cochables en place. Une étape porte le rayon de section de
+        // sa tâche pour rester dans la même section à l'écran.
+        for (auto &t : tasks) {
+            t.sectionAisle = t.item.aisle;
+            const std::string taskId = t.item.itemId;
+            const std::string aisle  = t.item.aisle;
+            m_rows.push_back(std::move(t));
+
+            std::vector<Row> kids;
+            for (const auto &item : m_items) {
+                if (!item.del && item.parentId == taskId)
+                    kids.push_back(Row{ item, true, aisle });
+            }
+            std::stable_sort(kids.begin(), kids.end(), [](const Row &a, const Row &b) {
+                if (a.item.order != b.item.order) return a.item.order < b.item.order;
+                return a.item.itemId < b.item.itemId;
+            });
+            for (auto &k : kids)
+                m_rows.push_back(std::move(k));
+        }
+    } else {
+        m_rows = std::move(tasks);
+    }
+
     rebuildStepCounts();
     endResetModel();
     emit countChanged();
@@ -217,6 +246,14 @@ void ItemModel::rebuildRows() {
     // Un merge distant peut apporter une catégorie qu'on ne connaissait pas.
     emit aisleNamesChanged();
     emit refreshed();
+}
+
+void ItemModel::setShowSteps(bool show) {
+    if (m_showSteps == show)
+        return;
+    m_showSteps = show;
+    emit showStepsChanged();
+    rebuildRows();
 }
 
 int ItemModel::rowCount(const QModelIndex &parent) const {
@@ -236,9 +273,13 @@ QVariant ItemModel::data(const QModelIndex &index, int role) const {
     case DoneRole:    return row.item.done;
     case DoneAtRole:  return static_cast<qlonglong>(row.item.doneAt);
     case CreatedRole: return static_cast<qlonglong>(row.item.created);
-    case AisleRole:   return QString::fromStdString(row.item.aisle);
+    // Une étape dépliée s'affiche dans la section de sa tâche, pas dans « Sans
+    // catégorie » (elle n'a pas de catégorie propre).
+    case AisleRole:   return QString::fromStdString(row.isStep ? row.sectionAisle
+                                                               : row.item.aisle);
     case ImageRole:   return QString::fromStdString(row.item.image);
     case DueRole:     return static_cast<qlonglong>(row.item.due);
+    case IsStepRole:  return row.isStep;
     case StepsTotalRole: {
         const auto it = m_stepCounts.find(row.item.itemId);
         return it != m_stepCounts.end() ? it->second.first : 0;
@@ -276,6 +317,7 @@ QHash<int, QByteArray> ItemModel::roleNames() const {
         { StepsTotalRole, "stepsTotal" },
         { StepsDoneRole,  "stepsDone"  },
         { DueRole,     "due"     },
+        { IsStepRole,  "isStep"  },
     };
 }
 
@@ -464,6 +506,13 @@ void ItemModel::toggleDone(const QString &itemId) {
 
     emit localChanged(m_listId);
     emit aisleNamesChanged();
+
+    // Étapes dépliées : l'ordre des lignes dépend des tâches ET de leurs étapes,
+    // le déplacement incrémental ne sait pas le rejouer — on reconstruit.
+    if (m_showSteps) {
+        rebuildRows();
+        return;
+    }
 
     // Find current position in visible rows.
     const int oldPos = findRow(itemId);

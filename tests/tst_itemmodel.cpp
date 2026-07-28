@@ -1144,6 +1144,58 @@ private slots:
         QCOMPARE(model.data(model.index(0), ItemModel::ImageRole).toString(), QString());
     }
 
+    // Mode « Au boulot » : les étapes se déplient sous leurs tâches, dans la section
+    // de leur tâche, cochables en place — et se replient en quittant le mode.
+    void test_showSteps_expandsUnderTasks() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        Database db;
+        QVERIFY(openDb(db, dir));
+        const auto listId = makeList(db);
+
+        ItemModel model;
+        model.load(db, listId, "dev-A");
+        model.addItem("Repeindre le volet", "", "", "Ménage");
+        model.addItem("Tondre", "", "", "");
+        const QString taskId = model.data(model.index(0), ItemModel::ItemIdRole).toString();
+
+        ItemModel steps;
+        steps.load(db, listId, "dev-A", taskId.toStdString());
+        steps.addItem("Poncer", "");
+        steps.addItem("Repeindre", "");
+
+        model.load(db, listId, "dev-A");   // recharger : les étapes sont en base
+        QCOMPARE(model.count(), 2);        // repliées par défaut
+
+        model.setShowSteps(true);
+        QCOMPARE(model.count(), 4);
+
+        // La tâche d'abord, puis SES étapes dans leur ordre, puis la tâche suivante.
+        QCOMPARE(model.data(model.index(0), ItemModel::NameRole).toString(),
+                 QStringLiteral("Repeindre le volet"));
+        QCOMPARE(model.data(model.index(1), ItemModel::NameRole).toString(),
+                 QStringLiteral("Poncer"));
+        QVERIFY(model.data(model.index(1), ItemModel::IsStepRole).toBool());
+        // L'étape s'affiche dans la section de sa tâche.
+        QCOMPARE(model.data(model.index(1), ItemModel::AisleRole).toString(),
+                 QStringLiteral("Ménage"));
+        QCOMPARE(model.data(model.index(2), ItemModel::NameRole).toString(),
+                 QStringLiteral("Repeindre"));
+        QCOMPARE(model.data(model.index(3), ItemModel::NameRole).toString(),
+                 QStringLiteral("Tondre"));
+        QVERIFY(!model.data(model.index(3), ItemModel::IsStepRole).toBool());
+
+        // Cocher une étape en place : la progression du mode la compte.
+        const QString poncer = model.data(model.index(1), ItemModel::ItemIdRole).toString();
+        model.toggleDone(poncer);
+        QCOMPARE(model.doneCount(), 1);
+        QCOMPARE(model.data(model.index(1), ItemModel::NameRole).toString(),
+                 QStringLiteral("Poncer"));   // garde sa place sous sa tâche
+
+        model.setShowSteps(false);
+        QCOMPARE(model.count(), 2);
+    }
+
     // L'échéance est facultative : posée, changée, retirée — champ LWW versionné,
     // valable pour une tâche comme pour une étape.
     void test_setDue() {

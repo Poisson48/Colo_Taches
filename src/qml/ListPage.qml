@@ -30,12 +30,19 @@ Item {
         ? selectedIds.length + (selectedIds.length > 1 ? " sélectionnés" : " sélectionné")
         : listTitle
 
-    // En plein chantier, on pose le téléphone sans le toucher pendant des minutes :
-    // l'écran ne doit pas s'éteindre au milieu de la liste.
-    onShoppingModeChanged: AppController.setKeepScreenOn(shoppingMode)
-    // Quitter la page en mode Chantier laisserait le drapeau posé, et l'écran allumé
-    // pour toujours.
-    Component.onDestruction: AppController.setKeepScreenOn(false)
+    // En plein boulot, on pose le téléphone sans le toucher pendant des minutes :
+    // l'écran ne doit pas s'éteindre au milieu de la liste. Et les étapes se
+    // déplient sous leurs tâches, cochables en place — c'est là qu'on en a besoin.
+    onShoppingModeChanged: {
+        AppController.setKeepScreenOn(shoppingMode)
+        AppController.items.showSteps = shoppingMode
+    }
+    // Quitter la page en mode Au boulot laisserait le drapeau posé, l'écran allumé
+    // pour toujours et les étapes dépliées au prochain écran.
+    Component.onDestruction: {
+        AppController.setKeepScreenOn(false)
+        AppController.items.showSteps = false
+    }
 
     function closeSearch() {
         searchOpen = false
@@ -122,11 +129,11 @@ Item {
         // Le mode des mains occupées est celui qu'on ouvre le plus souvent : il
         // mérite un bouton, pas une ligne de menu.
         ToolButton {
-            width: 90
+            width: 110
             height: Theme.touchTarget
             visible: !root.selectionMode && !root.shoppingMode
             contentItem: Label {
-                text: "Chantier"
+                text: "Au boulot !"
                 color: Theme.accent
                 font.pixelSize: 14
                 font.weight: Font.DemiBold
@@ -371,7 +378,9 @@ Item {
             delegate: Item {
                 id: wrapper
                 width: items.width
-                height: root.shoppingMode ? 68 : 60
+                // Les étapes dépliées (mode Au boulot) sont plus basses et en retrait :
+                // on lit d'un coup d'œil à quelle tâche elles appartiennent.
+                height: root.shoppingMode ? (model.isStep ? 52 : 68) : 60
 
                 // Pas de `required property int index` (couperait le contexte du modèle).
                 property int rowIndex: index
@@ -395,8 +404,9 @@ Item {
 
                 SwipeDelegate {
                     id: row
-                    width: wrapper.width - 2 * Theme.gap
-                    x: Theme.gap
+                    readonly property int stepIndent: model.isStep ? 26 : 0
+                    width: wrapper.width - 2 * Theme.gap - stepIndent
+                    x: Theme.gap + stepIndent
                     height: wrapper.height
                     padding: 0
 
@@ -458,7 +468,7 @@ Item {
                                 Layout.fillWidth: true
                                 text: model.name
                                 color: model.done ? Theme.textDim : Theme.text
-                                font.pixelSize: 16
+                                font.pixelSize: model.isStep ? 15 : 16
                                 font.strikeout: model.done
                                 elide: Text.ElideRight
                             }

@@ -33,6 +33,9 @@ class ItemModel : public QAbstractListModel {
     // ont inventés dans cette liste. NOTIFY et pas CONSTANT : un rayon créé doit
     // apparaître aussitôt dans le choix, ici comme chez les autres.
     Q_PROPERTY(QStringList aisleNames READ aisleNames NOTIFY aisleNamesChanged)
+    // Mode « Au boulot » : déplier les étapes sous leurs tâches, cochables en place.
+    // Purement local et d'affichage — rien n'est synchronisé.
+    Q_PROPERTY(bool showSteps READ showSteps WRITE setShowSteps NOTIFY showStepsChanged)
 
 public:
     enum Roles {
@@ -54,6 +57,8 @@ public:
         StepsDoneRole,
         // Échéance (ms epoch, 0 = pas d'échéance). Facultative, étapes comprises.
         DueRole,
+        // Cette ligne est une étape dépliée sous sa tâche (mode « Au boulot »).
+        IsStepRole,
     };
 
     // Rayons d'origine, dans l'ordre où on traverse un magasin. C'est cet ordre qui trie
@@ -96,6 +101,9 @@ public:
     // Choisir le mode : écrit le champ répliqué (LWW), retrie, et publie aux autres.
     // Un merge distant, lui, arrive par un rechargement complet du modèle (load).
     void setManualSort(bool manual);
+
+    bool showSteps() const { return m_showSteps; }
+    void setShowSteps(bool show);
 
     // Nom d'un article déjà présent (comparaison insensible à la casse et aux
     // espaces), ou chaîne vide. Sert à prévenir avant d'ajouter un doublon.
@@ -144,6 +152,7 @@ signals:
     void filterChanged();
     void aisleNamesChanged();
     void manualSortChanged();
+    void showStepsChanged();
     // Un article a été ajouté par l'utilisateur (pas un merge ni un import) : les
     // favoris fréquents ont changé.
     void itemAdded();
@@ -156,6 +165,10 @@ private:
     // Sorted visible rows (del=false only, sorted as §7).
     struct Row {
         core::Item item;
+        // Étape dépliée sous sa tâche (mode « Au boulot »). Son rayon de section est
+        // celui de sa tâche : une étape n'a pas de catégorie propre à l'écran.
+        bool        isStep = false;
+        std::string sectionAisle;
     };
 
     // Find visible row index by itemId (-1 if not found).
@@ -201,6 +214,7 @@ private:
     std::string      m_parentId;
     QString          m_filter;
     bool             m_manualSort = false;  // mode de classement de la liste chargée
+    bool             m_showSteps  = false;  // étapes dépliées (mode « Au boulot »)
 
     // Progression des étapes par tâche (mode liste) : itemId → {total, faites}.
     std::map<std::string, std::pair<int, int>> m_stepCounts;
