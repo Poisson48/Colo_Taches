@@ -489,9 +489,10 @@ void ItemModel::toggleDone(const QString &itemId) {
     const core::Ver ver{ lamport, m_deviceId };
     const int64_t now = QDateTime::currentMSecsSinceEpoch();
 
-    it->done    = !it->done;
+    const bool newDone = !it->done;
+    it->done    = newDone;
     it->doneVer = ver;
-    it->doneAt  = it->done ? now : 0;  // décoché → plus de date de cochage
+    it->doneAt  = newDone ? now : 0;  // décoché → plus de date de cochage
     it->touched = now;
 
     if (!m_db->upsertItem(*it)) return;
@@ -499,61 +500,54 @@ void ItemModel::toggleDone(const QString &itemId) {
     // Historique : chaque tâche (pas les étapes) cochée ici laisse une trace locale
     // durable — elle survivra à « Retirer les tâches faites ». « vous » : c'est ce
     // que l'UI affiche pour soi-même partout ailleurs.
-    if (it->done && it->parentId.empty()) {
+    if (newDone && it->parentId.empty()) {
         m_db->appendHistory(m_listId,
                             { it->itemId, it->name, it->aisle, now, "vous" });
     }
 
+    if (it->parentId.empty()) {
+        // Cocher (ou décocher) une tâche emporte ses étapes : l'état de la tâche
+        // EST celui de l'ensemble — une tâche « faite » aux étapes ouvertes ne
+        // voudrait rien dire.
+        for (auto &s : m_items) {
+            if (s.del || s.parentId != id || s.done == newDone) continue;
+            s.done    = newDone;
+            s.doneVer = ver;
+            s.doneAt  = newDone ? now : 0;
+            s.touched = now;
+            m_db->upsertItem(s);
+        }
+    } else {
+        // Dernière étape cochée → la tâche se coche toute seule ; une étape
+        // rouverte rouvre la tâche. La tâche reflète toujours ses étapes.
+        auto p = std::find_if(m_items.begin(), m_items.end(),
+                              [&](const core::Item &i){ return i.itemId == it->parentId; });
+        if (p != m_items.end() && !p->del) {
+            bool any = false, all = true;
+            for (const auto &s : m_items) {
+                if (s.del || s.parentId != p->itemId) continue;
+                any = true;
+                if (!s.done) { all = false; break; }
+            }
+            const bool target = any && all;
+            if (any && p->done != target) {
+                p->done    = target;
+                p->doneVer = ver;
+                p->doneAt  = target ? now : 0;
+                p->touched = now;
+                m_db->upsertItem(*p);
+                if (target && p->parentId.empty())
+                    m_db->appendHistory(m_listId,
+                                        { p->itemId, p->name, p->aisle, now, "vous" });
+            }
+        }
+    }
+
     emit localChanged(m_listId);
     emit aisleNamesChanged();
-
-    // Étapes dépliées : l'ordre des lignes dépend des tâches ET de leurs étapes,
-    // le déplacement incrémental ne sait pas le rejouer — on reconstruit.
-    if (m_showSteps) {
-        rebuildRows();
-        return;
-    }
-
-    // Find current position in visible rows.
-    const int oldPos = findRow(itemId);
-    if (oldPos < 0) return;
-
-    // Compute new position.
-    Row updatedRow{ *it };
-    // Remove from old position to compute new position.
-    std::vector<Row> scratch = m_rows;
-    scratch.erase(scratch.begin() + oldPos);
-
-    const bool manual = m_manualSort, steps = stepsMode();
-    const auto less = [=](const Row &a, const Row &b){ return rowLessThan(a, b, manual, steps); };
-    auto newIt = std::upper_bound(scratch.begin(), scratch.end(), updatedRow, less);
-    int newPos = static_cast<int>(newIt - scratch.begin());
-
-    if (oldPos == newPos) {
-        // Position unchanged — just update data.
-        m_rows[static_cast<size_t>(oldPos)].item = *it;
-        const QModelIndex idx = index(oldPos);
-        emit dataChanged(idx, idx, { DoneRole, DoneAtRole });
-    } else {
-        // Move row.
-        // Qt's beginMoveRows destination is the row BEFORE which we insert.
-        // If moving down: destination = newPos + 1 (in original indexing).
-        int dest = (oldPos < newPos) ? newPos + 1 : newPos;
-        beginMoveRows({}, oldPos, oldPos, {}, dest);
-        m_rows.erase(m_rows.begin() + oldPos);
-        // Re-insert at correct position (scratch newPos may shift by 1).
-        m_rows.insert(m_rows.begin() + newPos, updatedRow);
-        endMoveRows();
-
-        // Update done flag in newly positioned row.
-        const QModelIndex idx = index(newPos);
-        emit dataChanged(idx, idx, { DoneRole, DoneAtRole });
-    }
-
-    // Le nombre de lignes n'a pas bougé, mais la progression du mode Chantier si :
-    // c'est le seul moment où elle avance.
-    emit doneCountChanged();
-    emit refreshed();
+    // Plusieurs lignes ont pu changer de camp (la tâche ET ses étapes) : la
+    // reconstruction est le seul déplacement qui reste juste dans tous les cas.
+    rebuildRows();
 }
 
 void ItemModel::editItem(const QString &itemId, const QString &name,

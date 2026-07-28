@@ -1144,6 +1144,62 @@ private slots:
         QCOMPARE(model.data(model.index(0), ItemModel::ImageRole).toString(), QString());
     }
 
+    // Cocher la tâche coche ses étapes ; cocher toutes les étapes coche la tâche ;
+    // rouvrir une étape rouvre la tâche. La tâche reflète toujours son ensemble.
+    void test_toggleCascade() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        Database db;
+        QVERIFY(openDb(db, dir));
+        const auto listId = makeList(db);
+
+        ItemModel model;
+        model.load(db, listId, "dev-A");
+        model.addItem("Repeindre le volet", "");
+        const QString taskId = model.data(model.index(0), ItemModel::ItemIdRole).toString();
+
+        ItemModel steps;
+        steps.load(db, listId, "dev-A", taskId.toStdString());
+        steps.addItem("Poncer", "");
+        steps.addItem("Peindre", "");
+        const QString s1 = steps.data(steps.index(0), ItemModel::ItemIdRole).toString();
+        const QString s2 = steps.data(steps.index(1), ItemModel::ItemIdRole).toString();
+
+        const auto taskDone = [&]() {
+            for (const auto &it : db.getItems(listId))
+                if (it.itemId == taskId.toStdString()) return it.done;
+            return false;
+        };
+        const auto doneSteps = [&]() {
+            int n = 0;
+            for (const auto &it : db.getItems(listId))
+                if (!it.parentId.empty() && it.done) ++n;
+            return n;
+        };
+
+        // Cocher la tâche emporte ses étapes…
+        model.load(db, listId, "dev-A");
+        model.toggleDone(taskId);
+        QVERIFY(taskDone());
+        QCOMPARE(doneSteps(), 2);
+
+        // …et la décocher les rouvre toutes.
+        model.toggleDone(taskId);
+        QVERIFY(!taskDone());
+        QCOMPARE(doneSteps(), 0);
+
+        // Étape par étape : la dernière coche la tâche toute seule.
+        steps.load(db, listId, "dev-A", taskId.toStdString());
+        steps.toggleDone(s1);
+        QVERIFY(!taskDone());
+        steps.toggleDone(s2);
+        QVERIFY(taskDone());
+
+        // Une étape rouverte rouvre la tâche.
+        steps.toggleDone(s1);
+        QVERIFY(!taskDone());
+    }
+
     // Mode « Au boulot » : les étapes se déplient sous leurs tâches, dans la section
     // de leur tâche, cochables en place — et se replient en quittant le mode.
     void test_showSteps_expandsUnderTasks() {
@@ -1250,15 +1306,13 @@ private slots:
         model.addItem("Sortir les poubelles", "", "", "Ménage");
         const QString id = model.data(model.index(0), ItemModel::ItemIdRole).toString();
 
-        // Une étape cochée ne pollue pas l'historique des tâches.
+        // Cocher l'unique étape coche la tâche (cascade) : c'est la TÂCHE que
+        // l'historique consigne, pas l'étape.
         ItemModel steps;
         steps.load(db, listId, "dev-A", id.toStdString());
         steps.addItem("Sac jaune", "");
         const QString stepId = steps.data(steps.index(0), ItemModel::ItemIdRole).toString();
         steps.toggleDone(stepId);
-        QCOMPARE(db.getHistory(listId, 10).size(), size_t(0));
-
-        model.toggleDone(id);
         auto hist = db.getHistory(listId, 10);
         QCOMPARE(hist.size(), size_t(1));
         QCOMPARE(hist.front().name,   std::string("Sortir les poubelles"));
@@ -1266,12 +1320,13 @@ private slots:
         QCOMPARE(hist.front().byName, std::string("vous"));
         QVERIFY(hist.front().doneAt > 0);
 
-        // Décocher n'ajoute rien ; recocher fait une seconde entrée (autre date).
+        // Rouvrir n'ajoute rien ; refaire fait une seconde entrée (autre date).
         // La clé de dédup est (item, date en ms) : laisser passer une milliseconde.
-        model.toggleDone(id);
+        model.load(db, listId, "dev-A");   // la tâche a changé en base : recharger
+        model.toggleDone(id);              // rouverte (les étapes suivent)
         QCOMPARE(db.getHistory(listId, 10).size(), size_t(1));
         QTest::qWait(2);
-        model.toggleDone(id);
+        model.toggleDone(id);              // refaite
         QCOMPARE(db.getHistory(listId, 10).size(), size_t(2));
 
         // La trace survit au retrait de la tâche.

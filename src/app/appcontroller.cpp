@@ -339,12 +339,22 @@ bool AppController::init() {
             this,         &AppController::favoritesChanged);
 
     // Écritures dans la page d'étapes : publier, et recharger le modèle des tâches —
-    // la progression « 2/5 » affichée sur la ligne de la tâche vient de lui.
+    // la progression « 2/5 » affichée sur la ligne de la tâche vient de lui, et
+    // cocher la dernière étape vient de cocher la tâche elle-même.
     connect(&m_stepModel, &ItemModel::localChanged,
             this,         [this](const std::string& listId) {
         onLocalItemChange(listId);
         if (m_openListId == listId)
             m_itemModel.load(m_db, listId, m_deviceId.toStdString());
+    });
+
+    // Réciproque : cocher la tâche (depuis la liste ou sa page) coche ses étapes —
+    // la page d'étapes ouverte doit les voir se cocher.
+    connect(&m_itemModel, &ItemModel::localChanged,
+            this,         [this](const std::string& listId) {
+        if (!m_stepModel.parentId().empty() && m_openListId == listId)
+            m_stepModel.load(m_db, listId, m_deviceId.toStdString(),
+                             m_stepModel.parentId());
     });
 
     // Un blob de photo vient d'arriver : invalider le cache des vignettes.
