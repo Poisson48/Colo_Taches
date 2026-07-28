@@ -293,99 +293,6 @@ Item {
                 }
             }
 
-            // --- Photos (plusieurs : l'état avant, le résultat après…) ---
-            Repeater {
-                model: root.photoShas
-
-                delegate: Rectangle {
-                    id: photoCard
-                    required property string modelData
-                    required property int index
-
-                    Layout.fillWidth: true
-                    implicitHeight: photo.status === Image.Ready
-                                    ? photo.paintedHeight + 2 : 110
-                    radius: 12
-                    clip: true
-                    color: Theme.surfaceHigh
-                    border.color: Theme.outline
-                    border.width: 1
-
-                    Image {
-                        id: photo
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.top: parent.top
-                        anchors.topMargin: 1
-                        width: parent.width - 2
-                        source: "image://taskimg/" + photoCard.modelData
-                                + "?r=" + AppController.imageRevision
-                        fillMode: Image.PreserveAspectFit
-                        asynchronous: true
-                    }
-
-                    // Blob pas encore reçu d'un relais : le dire, plutôt qu'un cadre vide.
-                    Label {
-                        anchors.centerIn: parent
-                        visible: photo.status !== Image.Ready
-                        text: "Photo en cours de réception…"
-                        color: Theme.textDim
-                        font.pixelSize: 13
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: {
-                            if (photo.status === Image.Ready)
-                                photoViewer.openFor(photoCard.modelData)
-                        }
-                    }
-
-                    // Retirer CETTE photo (les autres restent) : croix discrète.
-                    ToolButton {
-                        anchors.top: parent.top
-                        anchors.right: parent.right
-                        anchors.margins: 4
-                        implicitWidth: 34
-                        implicitHeight: 34
-                        background: Rectangle {
-                            radius: width / 2
-                            color: Qt.rgba(0, 0, 0, 0.45)
-                        }
-                        contentItem: Icon {
-                            name: "close"
-                            color: "white"
-                            size: 13
-                        }
-                        onClicked: {
-                            removePhotoDialog.sha = photoCard.modelData
-                            removePhotoDialog.open()
-                        }
-                    }
-                }
-            }
-
-            // Toujours proposer une photo de plus : l'avant appelle son après.
-            Button {
-                Layout.fillWidth: true
-                flat: true
-                implicitHeight: Theme.touchTarget
-                contentItem: Label {
-                    text: root.photoShas.length > 0 ? "＋  Ajouter une autre photo"
-                                                    : "＋  Ajouter une photo"
-                    color: Theme.accent
-                    font.pixelSize: 14
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-                background: Rectangle {
-                    radius: 10
-                    color: parent.pressed ? Theme.surfaceHigh : "transparent"
-                    border.color: Theme.outline
-                    border.width: 1
-                }
-                onClicked: root.pickPhoto()
-            }
-
             // --- Étapes ---
             RowLayout {
                 Layout.fillWidth: true
@@ -560,6 +467,100 @@ Item {
 
                     onClicked: root.addStep()
                 }
+            }
+
+
+            // --- Photos (plusieurs : l'état avant, le résultat après…) ---
+            Repeater {
+                model: root.photoShas
+
+                delegate: Rectangle {
+                    id: photoCard
+                    required property string modelData
+                    required property int index
+
+                    Layout.fillWidth: true
+                    implicitHeight: photo.status === Image.Ready
+                                    ? photo.paintedHeight + 2 : 110
+                    radius: 12
+                    clip: true
+                    color: Theme.surfaceHigh
+                    border.color: Theme.outline
+                    border.width: 1
+
+                    Image {
+                        id: photo
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.top: parent.top
+                        anchors.topMargin: 1
+                        width: parent.width - 2
+                        source: "image://taskimg/" + photoCard.modelData
+                                + "?r=" + AppController.imageRevision
+                        fillMode: Image.PreserveAspectFit
+                        asynchronous: true
+                    }
+
+                    // Blob pas encore reçu d'un relais : le dire, plutôt qu'un cadre vide.
+                    Label {
+                        anchors.centerIn: parent
+                        visible: photo.status !== Image.Ready
+                        text: "Photo en cours de réception…"
+                        color: Theme.textDim
+                        font.pixelSize: 13
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            if (photo.status === Image.Ready)
+                                photoViewer.openFor(photoCard.modelData)
+                        }
+                    }
+
+                    // Retirer CETTE photo (les autres restent) : croix discrète.
+                    ToolButton {
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.margins: 4
+                        implicitWidth: 34
+                        implicitHeight: 34
+                        background: Rectangle {
+                            radius: width / 2
+                            color: Qt.rgba(0, 0, 0, 0.45)
+                        }
+                        contentItem: Icon {
+                            name: "close"
+                            color: "white"
+                            size: 13
+                        }
+                        onClicked: {
+                            removePhotoDialog.sha = photoCard.modelData
+                            removePhotoDialog.open()
+                        }
+                    }
+                }
+            }
+
+            // Toujours proposer une photo de plus : l'avant appelle son après.
+            Button {
+                Layout.fillWidth: true
+                flat: true
+                implicitHeight: Theme.touchTarget
+                contentItem: Label {
+                    text: root.photoShas.length > 0 ? "＋  Ajouter une autre photo"
+                                                    : "＋  Ajouter une photo"
+                    color: Theme.accent
+                    font.pixelSize: 14
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    radius: 10
+                    color: parent.pressed ? Theme.surfaceHigh : "transparent"
+                    border.color: Theme.outline
+                    border.width: 1
+                }
+                onClicked: root.pickPhoto()
             }
 
             Item { Layout.preferredHeight: 8 }
