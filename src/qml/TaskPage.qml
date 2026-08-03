@@ -17,6 +17,9 @@ Item {
 
     readonly property string pageTitle: task && task.name ? task.name : "Tâche"
 
+    // Une poignée d'étape est tenue : la page ne défile plus, le geste réordonne.
+    property bool stepDragging: false
+
     // Les photos de la tâche, dans l'ordre d'ajout : « avant » puis « après ».
     readonly property var photoShas: task && task.image && task.image.length > 0
                                      ? task.image.split(" ").filter(s => s.length > 0)
@@ -131,6 +134,9 @@ Item {
         anchors.fill: parent
         contentHeight: content.implicitHeight + 2 * Theme.pad
         clip: true
+        // Figée pendant le glissement d'une étape : sinon elle disputerait le
+        // geste vertical à la poignée.
+        interactive: !root.stepDragging
         boundsBehavior: Flickable.StopAtBounds
         ScrollIndicator.vertical: ScrollIndicator {}
 
@@ -351,83 +357,136 @@ Item {
 
             // Les étapes gardent leur place une fois cochées (tri du modèle) : la
             // séquence « démonter, poncer, repeindre » reste lisible telle quelle.
-            // Un tap sur le texte ouvre le menu de l'étape (échéance, agenda, retrait).
+            // Un tap sur le texte ouvre le menu de l'étape (modifier, échéance,
+            // agenda, retrait) ; la poignée à droite glisse pour réordonner.
+            //
+            // Conteneur immobile (place dans la colonne + zone de dépôt) contenant
+            // la ligne, qui se détache sous le doigt pendant un glissement.
             Repeater {
                 model: AppController.steps
 
-                delegate: Rectangle {
-                    id: stepRow
+                delegate: Item {
+                    id: stepWrapper
                     Layout.fillWidth: true
                     implicitHeight: model.due > 0 ? 58 : 52
-                    radius: 12
-                    color: Theme.surface
-                    border.color: Theme.outline
-                    border.width: 1
 
-                    RowLayout {
+                    // Pas de `required property int index` (couperait le contexte du modèle).
+                    property int rowIndex: index
+                    property bool held: false
+                    z: held ? 2 : 1
+
+                    DropArea {
                         anchors.fill: parent
-                        spacing: 0
+                        onEntered: function (drag) {
+                            const source = drag.source
+                            if (!source || source === stepWrapper)
+                                return
+                            AppController.steps.moveItem(source.rowIndex,
+                                                         stepWrapper.rowIndex)
+                        }
+                    }
 
-                        CheckBox {
-                            Layout.leftMargin: 6
-                            Layout.alignment: Qt.AlignVCenter
-                            implicitWidth: Theme.touchTarget
-                            implicitHeight: Theme.touchTarget
-                            checked: model.done
-                            Material.accent: Theme.accent
-                            onToggled: {
-                                AppController.steps.toggleDone(model.itemId)
-                                AppController.vibrate()
-                            }
+                    Rectangle {
+                        id: stepRow
+                        width: stepWrapper.width
+                        height: stepWrapper.height
+                        radius: 12
+                        color: Theme.surface
+                        border.color: Theme.outline
+                        border.width: 1
+
+                        Drag.active: stepWrapper.held
+                        Drag.source: stepWrapper
+                        Drag.hotSpot.x: width / 2
+                        Drag.hotSpot.y: height / 2
+                        opacity: stepWrapper.held ? 0.85 : 1.0
+                        // Pendant le glissement, la ligne quitte son conteneur (géré
+                        // par le layout) pour la page : elle reste sous le doigt
+                        // pendant que les autres se réorganisent.
+                        states: State {
+                            when: stepWrapper.held
+                            ParentChange { target: stepRow; parent: root }
                         }
 
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            Layout.leftMargin: 4
-                            Layout.alignment: Qt.AlignVCenter
-                            spacing: 1
+                        RowLayout {
+                            anchors.fill: parent
+                            spacing: 0
 
-                            Label {
-                                Layout.fillWidth: true
-                                text: model.name
-                                color: model.done ? Theme.textDim : Theme.text
-                                font.pixelSize: 15
-                                font.strikeout: model.done
-                                elide: Text.ElideRight
-                            }
-
-                            Label {
-                                Layout.fillWidth: true
-                                visible: model.due > 0
-                                text: root.dueText(model.due)
-                                color: root.isOverdue(model.due) && !model.done
-                                       ? Theme.danger : Theme.textDim
-                                font.pixelSize: 12
-                                elide: Text.ElideRight
-                            }
-
-                            // Le texte de l'étape est la poignée de son menu.
-                            TapHandler {
-                                onTapped: {
-                                    stepMenu.stepId   = model.itemId
-                                    stepMenu.stepName = model.name
-                                    stepMenu.stepDue  = model.due
-                                    stepMenu.popup()
+                            CheckBox {
+                                Layout.leftMargin: 6
+                                Layout.alignment: Qt.AlignVCenter
+                                implicitWidth: Theme.touchTarget
+                                implicitHeight: Theme.touchTarget
+                                checked: model.done
+                                Material.accent: Theme.accent
+                                onToggled: {
+                                    AppController.steps.toggleDone(model.itemId)
+                                    AppController.vibrate()
                                 }
                             }
-                        }
 
-                        ToolButton {
-                            Layout.rightMargin: 2
-                            Layout.alignment: Qt.AlignVCenter
-                            implicitWidth: 38
-                            implicitHeight: Theme.touchTarget
-                            contentItem: Icon {
-                                name: "close"
-                                color: Theme.textDim
-                                size: 14
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.leftMargin: 4
+                                Layout.alignment: Qt.AlignVCenter
+                                spacing: 1
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: model.name
+                                    color: model.done ? Theme.textDim : Theme.text
+                                    font.pixelSize: 15
+                                    font.strikeout: model.done
+                                    elide: Text.ElideRight
+                                }
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    visible: model.due > 0
+                                    text: root.dueText(model.due)
+                                    color: root.isOverdue(model.due) && !model.done
+                                           ? Theme.danger : Theme.textDim
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                }
+
+                                // Le texte de l'étape est la poignée de son menu.
+                                TapHandler {
+                                    onTapped: {
+                                        stepMenu.stepId    = model.itemId
+                                        stepMenu.stepName  = model.name
+                                        stepMenu.stepDue   = model.due
+                                        stepMenu.stepQty   = model.qty
+                                        stepMenu.stepNote  = model.note
+                                        stepMenu.stepAisle = model.aisle
+                                        stepMenu.popup()
+                                    }
+                                }
                             }
-                            onClicked: AppController.steps.removeItem(model.itemId)
+
+                            // Poignée de déplacement : on la glisse pour réordonner la
+                            // séquence. `held` fige la page le temps du geste. (La
+                            // suppression, elle, vit dans le menu de l'étape.)
+                            MouseArea {
+                                Layout.rightMargin: 2
+                                Layout.alignment: Qt.AlignVCenter
+                                Layout.preferredWidth: 34
+                                Layout.preferredHeight: Theme.touchTarget
+                                drag.target: stepWrapper.held ? stepRow : undefined
+                                drag.axis: Drag.YAxis
+                                cursorShape: Qt.SizeVerCursor
+                                preventStealing: true
+                                onPressed: { stepWrapper.held = true; root.stepDragging = true }
+                                onReleased: { stepWrapper.held = false; root.stepDragging = false }
+                                onCanceled: { stepWrapper.held = false; root.stepDragging = false }
+
+                                Icon {
+                                    anchors.centerIn: parent
+                                    name: "grip"
+                                    color: Theme.textDim
+                                    size: 16
+                                }
+                            }
                         }
                     }
                 }
@@ -612,13 +671,22 @@ Item {
         }
     }
 
-    // Menu d'une étape : son échéance, l'agenda, sa suppression.
+    // Menu d'une étape : la modifier, son échéance, l'agenda, sa suppression.
     ColoMenu {
         id: stepMenu
         property string stepId: ""
         property string stepName: ""
         property real   stepDue: 0
+        // Champs invisibles à l'écran mais répliqués : conservés tels quels au
+        // renommage, pour ne pas écraser une modification distante concurrente.
+        property string stepQty: ""
+        property string stepNote: ""
+        property string stepAisle: ""
 
+        MenuItem {
+            text: "Modifier l'étape"
+            onTriggered: stepEditDialog.openFor(stepMenu.stepId, stepMenu.stepName)
+        }
         MenuItem {
             text: stepMenu.stepDue > 0 ? "Modifier l'échéance" : "Ajouter une échéance"
             onTriggered: {
@@ -654,6 +722,38 @@ Item {
     }
 
     // --- Dialogues ---
+
+    // Renommer une étape. Les autres champs (quantité, note, catégorie) sont
+    // repassés inchangés : editItem ne touche pas leur version.
+    ColoDialog {
+        id: stepEditDialog
+        title: "Modifier l'étape"
+        acceptText: "Enregistrer"
+        acceptEnabled: stepEditName.text.trim().length > 0
+
+        property string stepId: ""
+
+        function openFor(id, name) {
+            stepId = id
+            stepEditName.text = name
+            open()
+            stepEditName.forceActiveFocus()
+            stepEditName.selectAll()
+        }
+
+        ColoTextField {
+            id: stepEditName
+            Layout.fillWidth: true
+            hint: "Étape"
+            onAccepted: if (stepEditDialog.acceptEnabled) stepEditDialog.accept()
+        }
+
+        onAccepted: AppController.steps.editItem(stepEditDialog.stepId,
+                                                 stepEditName.text.trim(),
+                                                 stepMenu.stepQty,
+                                                 stepMenu.stepNote,
+                                                 stepMenu.stepAisle)
+    }
 
     ColoDialog {
         id: removePhotoDialog
