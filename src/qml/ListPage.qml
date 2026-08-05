@@ -31,16 +31,13 @@ Item {
         : listTitle
 
     // En plein boulot, on pose le téléphone sans le toucher pendant des minutes :
-    // l'écran ne doit pas s'éteindre au milieu de la liste. Et les étapes se
-    // déplient sous leurs tâches, cochables en place — c'est là qu'on en a besoin.
+    // l'écran ne doit pas s'éteindre (déjà géré globalement dans Main) et les étapes
+    // se déplient sous leurs tâches, cochables en place.
     onShoppingModeChanged: {
-        AppController.setKeepScreenOn(shoppingMode)
         AppController.items.showSteps = shoppingMode
     }
-    // Quitter la page en mode Au boulot laisserait le drapeau posé, l'écran allumé
-    // pour toujours et les étapes dépliées au prochain écran.
+    // Quitter la page en mode Au boulot laisserait les étapes dépliées au prochain écran.
     Component.onDestruction: {
-        AppController.setKeepScreenOn(false)
         AppController.items.showSteps = false
     }
 
@@ -351,6 +348,23 @@ Item {
             // mode manuel, aucune section : la liste est une seule séquence à la main.
             section.property: AppController.items.manualSort ? "" : "aisle"
             section.criteria: ViewSection.FullString
+
+            // Un changement reçu d'un autre téléphone recharge le modèle en bloc
+            // (reset), ce qui renvoie la vue tout en haut. À deux sur le chantier,
+            // chaque cochage de l'autre ferait perdre sa place. On mémorise la
+            // position juste avant le reset et on la rétablit juste après (bornée
+            // si la liste a raccourci).
+            property real savedContentY: 0
+            Connections {
+                target: AppController.items
+                function onModelAboutToBeReset() { items.savedContentY = items.contentY }
+                function onModelReset() {
+                    Qt.callLater(function() {
+                        items.contentY = items.savedContentY
+                        items.returnToBounds()
+                    })
+                }
+            }
             section.delegate: Item {
                 required property string section
                 width: items.width
@@ -370,17 +384,16 @@ Item {
                 }
             }
 
-            // Ce qui reste à faire est en haut de sa catégorie (tri du modèle) ; une
-            // fois cochée, la tâche descend et s'estompe au lieu de disparaître.
+            // Un article coché ne bouge pas (le tri du modèle ignore l'état fait) :
+            // il s'estompe sur place — la liste ne se réorganise pas sous les doigts.
             //
             // Conteneur immobile (place dans la vue + zone de dépôt) contenant la ligne,
             // qui se détache sous le doigt pendant un glissement.
             delegate: Item {
                 id: wrapper
                 width: items.width
-                // Les étapes dépliées (mode Au boulot) sont plus basses et en retrait :
-                // on lit d'un coup d'œil à quelle tâche elles appartiennent.
-                height: root.shoppingMode ? (model.isStep ? 52 : 68) : 60
+                // Hauteur = contenu (nom qui peut passer à la ligne).
+                height: row.height
 
                 // Pas de `required property int index` (couperait le contexte du modèle).
                 property int rowIndex: index
@@ -407,7 +420,9 @@ Item {
                     readonly property int stepIndent: model.isStep ? 26 : 0
                     width: wrapper.width - 2 * Theme.gap - stepIndent
                     x: Theme.gap + stepIndent
-                    height: wrapper.height
+                    // S'adapte au nom enroulé (WordWrap) : une ligne courte reste compacte.
+                    height: Math.max(root.shoppingMode ? (model.isStep ? 52 : 68) : 60,
+                                     contentItem.implicitHeight + 8)
                     padding: 0
 
                     readonly property bool selected: root.isSelected(model.itemId)
@@ -470,17 +485,18 @@ Item {
                                 color: model.done ? Theme.textDim : Theme.text
                                 font.pixelSize: model.isStep ? 15 : 16
                                 font.strikeout: model.done
-                                elide: Text.ElideRight
+                                wrapMode: Text.WordWrap
                             }
 
-                            // Échéance, progression des étapes et détails sur une
-                            // ligne : « pour demain \u00b7 2/5 étapes \u00b7 la peinture d'abord ».
+                            // Échéance, progression des étapes et détails.
                             Label {
                                 Layout.fillWidth: true
                                 visible: text.length > 0
                                 text: {
                                     const parts = []
-                                    if (model.due > 0)
+                                    if (model.dueNote && model.dueNote.length > 0)
+                                        parts.push(model.dueNote)
+                                    else if (model.due > 0)
                                         parts.push(root.dueText(model.due))
                                     if (model.stepsTotal > 0)
                                         parts.push(model.stepsDone + "/" + model.stepsTotal
@@ -489,14 +505,15 @@ Item {
                                         parts.push(model.note)
                                     return parts.join(" \u00b7 ")
                                 }
-                                // Le retard crie, le reste chuchote.
+                                // Le retard crie (dates seules), le reste chuchote.
                                 color: root.isOverdue(model.due) && !model.done
+                                       && !(model.dueNote && model.dueNote.length > 0)
                                        ? Theme.danger
                                        : (model.stepsTotal > 0
                                           && model.stepsDone === model.stepsTotal
                                           ? Theme.accent : Theme.textDim)
                                 font.pixelSize: 13
-                                elide: Text.ElideRight
+                                wrapMode: Text.WordWrap
                             }
                         }
 
@@ -702,19 +719,13 @@ Item {
             }
         }
 
-        // Barre d'ajout : collée en bas, au-dessus du clavier (adjustResize).
-        // Masquée en sélection (on supprime, on n'ajoute pas) et en mode Chantier
-        // (le clavier n'a rien à faire là, et la liste doit rester entièrement visible).
+        // Bouton d'ajout : ouvre une modale centrée (évite que le clavier cache
+        // la saisie en bas d'une longue liste).
         Rectangle {
             Layout.fillWidth: true
-            // Les détails n'apparaissent qu'une fois le nom commencé : c'est à ce
-            // moment-là qu'on sait préciser (« fuite évier » → « sous le siphon »),
-            // et la barre reste sur une ligne le reste du temps.
-            implicitHeight: root.composing ? 118 : 72
+            implicitHeight: 72
             visible: !root.selectionMode && !root.shoppingMode
             color: Theme.surface
-            clip: true
-            Behavior on implicitHeight { NumberAnimation { duration: 120 } }
 
             Rectangle {
                 width: parent.width
@@ -722,78 +733,25 @@ Item {
                 color: Theme.outline
             }
 
-            ColumnLayout {
+            Button {
                 anchors.fill: parent
                 anchors.margins: 10
-                spacing: 8
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-
-                    ColoTextField {
-                        id: nameField
-                        Layout.fillWidth: true
-                        hint: "Ajouter une tâche"
-                        onAccepted: root.addItem()
-                        // Pré-remplir la catégorie d'après les tâches déjà classées
-                        // (« tondre » → Jardin), tant que l'utilisateur n'a pas choisi
-                        // lui-même. Rien n'est assigné : juste une proposition.
-                        onTextChanged: {
-                            if (root.aisleManual)
-                                return
-                            const s = AppController.suggestAisle(text.trim())
-                            addAisleBox.aisle = s   // "" si inconnu → « Sans catégorie »
-                        }
-                    }
-
-                    RoundButton {
-                        id: addButton
-                        Layout.preferredWidth: 52
-                        Layout.preferredHeight: 52
-                        enabled: nameField.text.trim().length > 0
-
-                        // Fond explicite : le style Material ignore Material.background
-                        // sur un bouton désactivé, et le bouton devient invisible.
-                        background: Rectangle {
-                            radius: width / 2
-                            color: !addButton.enabled ? Theme.surfaceHigh
-                                 : (addButton.pressed ? Theme.accentDim : Theme.accent)
-                        }
-
-                        contentItem: Label {
-                            text: "+"
-                            color: addButton.enabled ? Theme.onAccent : Theme.textDim
-                            font.pixelSize: 24
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-
-                        onClicked: root.addItem()
-                    }
+                flat: true
+                contentItem: Label {
+                    text: "＋  Ajouter une tâche"
+                    color: Theme.accent
+                    font.pixelSize: 15
+                    font.weight: Font.DemiBold
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
                 }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.rightMargin: 60
-                    visible: root.composing
-                    spacing: 8
-
-                    ColoTextField {
-                        id: addNoteField
-                        Layout.fillWidth: true
-                        hint: "Détails (facultatif)"
-                        onAccepted: root.addItem()
-                    }
-
-                    AisleBox {
-                        id: addAisleBox
-                        objectName: "addAisleBox"
-                        Layout.preferredWidth: 132
-                        // Un choix manuel fige la catégorie : on cesse de la pré-remplir.
-                        onChosen: root.aisleManual = true
-                    }
+                background: Rectangle {
+                    radius: 12
+                    color: parent.pressed ? Theme.surfaceHigh : Theme.background
+                    border.color: Theme.outline
+                    border.width: 1
                 }
+                onClicked: addItemDialog.open()
             }
         }
     }
@@ -854,14 +812,50 @@ Item {
         }
     }
 
-    // Une tâche en cours de saisie : la ligne de détails se déplie.
-    readonly property bool composing: nameField.activeFocus
-                                      || addNoteField.activeFocus
-                                      || nameField.text.length > 0
-
-    // L'utilisateur a-t-il choisi la catégorie lui-même pour la tâche en cours ? Si
-    // oui, on cesse de la pré-remplir d'après le nom. Réinitialisé à chaque tâche.
+    // L'utilisateur a-t-il choisi la catégorie lui-même pour la tâche en cours ?
     property bool aisleManual: false
+
+    ColoDialog {
+        id: addItemDialog
+        title: "Nouvelle tâche"
+        acceptText: "Ajouter"
+        acceptEnabled: nameField.text.trim().length > 0
+
+        ColoTextField {
+            id: nameField
+            Layout.fillWidth: true
+            hint: "Tâche"
+            onAccepted: if (addItemDialog.acceptEnabled) addItemDialog.accept()
+            onTextChanged: {
+                if (root.aisleManual)
+                    return
+                addAisleBox.aisle = AppController.suggestAisle(text.trim())
+            }
+        }
+
+        ColoTextField {
+            id: addNoteField
+            Layout.fillWidth: true
+            hint: "Détails (facultatif)"
+            onAccepted: if (addItemDialog.acceptEnabled) addItemDialog.accept()
+        }
+
+        AisleBox {
+            id: addAisleBox
+            objectName: "addAisleBox"
+            Layout.fillWidth: true
+            onChosen: root.aisleManual = true
+        }
+
+        onOpened: {
+            nameField.text = ""
+            addNoteField.text = ""
+            root.aisleManual = false
+            addAisleBox.aisle = ""
+            nameField.forceActiveFocus()
+        }
+        onAccepted: root.addItem()
+    }
 
     // Échéance en clair : « pour demain », « en retard (3 juil.) »… "" si aucune.
     function dueText(ms) {
@@ -925,12 +919,10 @@ Item {
                                     addAisleBox.aisle)
         nameField.text = ""
         addNoteField.text = ""
-        // On repart propre : la catégorie de la prochaine tâche sera pré-remplie
-        // d'après son nom — la mémoire fait le travail (« tondre », « désherber »
-        // retomberont d'eux-mêmes au jardin).
         root.aisleManual = false
         addAisleBox.aisle = ""
-        nameField.forceActiveFocus()
+        if (addItemDialog.opened)
+            addItemDialog.close()
     }
 
     // Ajout depuis un favori : la catégorie mémorisée fait gagner la saisie. Déjà

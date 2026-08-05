@@ -37,6 +37,10 @@ ApplicationWindow {
         onRunningChanged: if (running) window.showSynced = true
     }
 
+    // Empêcher la veille tant que l'app est ouverte (chantier, rédaction, lecture…).
+    Component.onCompleted: AppController.setKeepScreenOn(true)
+    Component.onDestruction: AppController.setKeepScreenOn(false)
+
     // Bouton retour Android : Qt le délivre ici comme une demande de fermeture de
     // fenêtre. Sans ce handler, il quittait l'app — depuis une liste ouverte comme
     // depuis un dialogue, ce qui ressemble à un plantage. On l'absorbe tant qu'il
@@ -135,15 +139,38 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
 
-        // Bandeau hors ligne (SPEC §3.5) : les modifs partent dans l'outbox.
+        // La pile occupe toute la hauteur : les bandeaux (hors ligne, sync, mise à
+        // jour) sont en overlay au-dessus, pour ne pas pousser la liste vers le bas.
+        StackView {
+            id: stack
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            initialItem: listsPage
+
+            pushEnter: Transition { NumberAnimation { property: "x"; from: width; to: 0; duration: 180; easing.type: Easing.OutCubic } }
+            pushExit:  Transition { NumberAnimation { property: "opacity"; to: 0.0; duration: 140 } }
+            popEnter:  Transition { NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 140 } }
+            popExit:   Transition { NumberAnimation { property: "x"; to: width; duration: 180; easing.type: Easing.OutCubic } }
+        }
+    }
+
+    // Bandeaux en overlay : semi-transparents, lisibles, sans décaler le contenu.
+    Column {
+        id: bannerOverlay
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        z: 10
+        spacing: 0
+
         Rectangle {
             id: offlineBanner
-            Layout.fillWidth: true
-            Layout.preferredHeight: window.offline ? 32 : 0
-            color: Theme.warning
+            width: parent.width
+            height: window.offline ? 32 : 0
+            color: Qt.rgba(Theme.warning.r, Theme.warning.g, Theme.warning.b, 0.92)
             clip: true
-            visible: Layout.preferredHeight > 0
-            Behavior on Layout.preferredHeight { NumberAnimation { duration: 160 } }
+            visible: height > 0
+            Behavior on height { NumberAnimation { duration: 160 } }
 
             Label {
                 anchors.centerIn: parent
@@ -156,14 +183,14 @@ ApplicationWindow {
             }
         }
 
-        // État de synchronisation. Silencieux quand tout va bien : un bandeau permanent
-        // « à jour » ne serait qu'un bruit de fond qu'on cesserait de lire.
         Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: visible ? 26 : 0
+            width: parent.width
+            height: visible ? 26 : 0
             visible: !window.offline && (window.pending || window.showSynced)
             clip: true
-            color: window.pending ? Theme.surfaceHigh : Theme.accentSoft
+            color: window.pending
+                   ? Qt.rgba(Theme.surfaceHigh.r, Theme.surfaceHigh.g, Theme.surfaceHigh.b, 0.92)
+                   : Qt.rgba(Theme.accentSoft.r, Theme.accentSoft.g, Theme.accentSoft.b, 0.92)
 
             Label {
                 anchors.centerIn: parent
@@ -178,15 +205,13 @@ ApplicationWindow {
             }
         }
 
-        // Mise à jour disponible. L'app se distribue hors Play Store : sans cette
-        // bannière, personne n'apprend qu'une version est sortie.
         Rectangle {
             id: updateBanner
-            Layout.fillWidth: true
-            Layout.preferredHeight: visible ? 56 : 0
+            width: parent.width
+            height: visible ? 56 : 0
             visible: Updater.updateAvailable || Updater.downloading
                      || Updater.readyToInstall
-            color: Theme.surfaceHigh
+            color: Qt.rgba(Theme.surfaceHigh.r, Theme.surfaceHigh.g, Theme.surfaceHigh.b, 0.95)
             clip: true
 
             Rectangle {
@@ -221,8 +246,6 @@ ApplicationWindow {
                         }
                     }
 
-                    // Pendant le téléchargement, la barre remplace le texte d'appoint :
-                    // un pourcentage qui n'avance pas est plus inquiétant qu'utile.
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 3
@@ -267,7 +290,7 @@ ApplicationWindow {
                         if (Updater.readyToInstall)
                             Updater.install()
                         else if (Updater.releaseNotes.length > 0)
-                            notesDialog.open()   // dire ce qu'on installe avant de l'installer
+                            notesDialog.open()
                         else
                             Updater.download()
                     }
@@ -286,18 +309,6 @@ ApplicationWindow {
                 }
             }
         }
-
-        StackView {
-            id: stack
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            initialItem: listsPage
-
-            pushEnter: Transition { NumberAnimation { property: "x"; from: width; to: 0; duration: 180; easing.type: Easing.OutCubic } }
-            pushExit:  Transition { NumberAnimation { property: "opacity"; to: 0.0; duration: 140 } }
-            popEnter:  Transition { NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 140 } }
-            popExit:   Transition { NumberAnimation { property: "x"; to: width; duration: 180; easing.type: Easing.OutCubic } }
-        }
     }
 
     Component { id: listsPage; ListsPage {} }
@@ -313,8 +324,6 @@ ApplicationWindow {
         }
     }
 
-    // Ce que la mise à jour apporte. Personne n'installe de bon cœur une version dont
-    // il ne sait rien — et les notes sont déjà dans la release, il suffisait de les lire.
     ColoDialog {
         id: notesDialog
         title: "Nouveautés — " + Updater.latestVersion
@@ -342,7 +351,6 @@ ApplicationWindow {
         onAccepted: Updater.download()
     }
 
-    // Snackbar : retour visuel court (lien copié, liste rejointe, erreur…).
     Popup {
         id: snackbar
         y: parent.height - height - 24

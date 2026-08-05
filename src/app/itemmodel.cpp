@@ -103,11 +103,10 @@ bool ItemModel::rowLessThan(const Row &a, const Row &b, bool manual, bool steps)
             return a.item.aisle < b.item.aisle;
     }
 
-    // Ce qui reste à faire avant ce qui est fait (dans la catégorie en mode
-    // catégorie, sur toute la liste en mode manuel).
-    if (a.item.done != b.item.done)
-        return !a.item.done; // false < true
-
+    // L'état fait/à faire n'entre PAS dans le tri : cocher ne déplace rien, ni chez
+    // soi ni chez les autres. À plusieurs sur le chantier, une liste qui se
+    // réorganise à chaque cochage est illisible ; une tâche faite s'estompe, elle
+    // ne bouge pas.
     if (a.item.order != b.item.order)
         return a.item.order < b.item.order;
     return a.item.itemId < b.item.itemId;   // départage stable
@@ -279,6 +278,7 @@ QVariant ItemModel::data(const QModelIndex &index, int role) const {
                                                                : row.item.aisle);
     case ImageRole:   return QString::fromStdString(row.item.image);
     case DueRole:     return static_cast<qlonglong>(row.item.due);
+    case DueNoteRole: return QString::fromStdString(row.item.dueNote);
     case IsStepRole:  return row.isStep;
     case StepsTotalRole: {
         const auto it = m_stepCounts.find(row.item.itemId);
@@ -317,6 +317,7 @@ QHash<int, QByteArray> ItemModel::roleNames() const {
         { StepsTotalRole, "stepsTotal" },
         { StepsDoneRole,  "stepsDone"  },
         { DueRole,     "due"     },
+        { DueNoteRole, "dueNote" },
         { IsStepRole,  "isStep"  },
     };
 }
@@ -335,6 +336,7 @@ QVariantMap ItemModel::get(const QString &itemId) const {
     m.insert(QStringLiteral("aisle"),   QString::fromStdString(it->aisle));
     m.insert(QStringLiteral("image"),   QString::fromStdString(it->image));
     m.insert(QStringLiteral("due"),     static_cast<qlonglong>(it->due));
+    m.insert(QStringLiteral("dueNote"), QString::fromStdString(it->dueNote));
     m.insert(QStringLiteral("done"),    it->done);
     m.insert(QStringLiteral("doneAt"),  static_cast<qlonglong>(it->doneAt));
     m.insert(QStringLiteral("created"), static_cast<qlonglong>(it->created));
@@ -497,6 +499,11 @@ void ItemModel::toggleDone(const QString &itemId) {
 
     if (!m_db->upsertItem(*it)) return;
 
+    // Lignes dont l'apparence peut changer (sans changer de place).
+    std::vector<std::string> dirtyIds{ id };
+    // Tâche dont la progression d'étapes doit être rafraîchie à l'écran.
+    std::string stepsTaskId;
+
     // Historique : chaque tâche (pas les étapes) cochée ici laisse une trace locale
     // durable — elle survivra à « Retirer les tâches faites ». « vous » : c'est ce
     // que l'UI affiche pour soi-même partout ailleurs.
@@ -509,6 +516,7 @@ void ItemModel::toggleDone(const QString &itemId) {
         // Cocher (ou décocher) une tâche emporte ses étapes : l'état de la tâche
         // EST celui de l'ensemble — une tâche « faite » aux étapes ouvertes ne
         // voudrait rien dire.
+        stepsTaskId = id;
         for (auto &s : m_items) {
             if (s.del || s.parentId != id || s.done == newDone) continue;
             s.done    = newDone;
@@ -516,10 +524,12 @@ void ItemModel::toggleDone(const QString &itemId) {
             s.doneAt  = newDone ? now : 0;
             s.touched = now;
             m_db->upsertItem(s);
+            dirtyIds.push_back(s.itemId);
         }
     } else {
         // Dernière étape cochée → la tâche se coche toute seule ; une étape
         // rouverte rouvre la tâche. La tâche reflète toujours ses étapes.
+        stepsTaskId = it->parentId;
         auto p = std::find_if(m_items.begin(), m_items.end(),
                               [&](const core::Item &i){ return i.itemId == it->parentId; });
         if (p != m_items.end() && !p->del) {
@@ -536,6 +546,7 @@ void ItemModel::toggleDone(const QString &itemId) {
                 p->doneAt  = target ? now : 0;
                 p->touched = now;
                 m_db->upsertItem(*p);
+                dirtyIds.push_back(p->itemId);
                 if (target && p->parentId.empty())
                     m_db->appendHistory(m_listId,
                                         { p->itemId, p->name, p->aisle, now, "vous" });
@@ -545,9 +556,41 @@ void ItemModel::toggleDone(const QString &itemId) {
 
     emit localChanged(m_listId);
     emit aisleNamesChanged();
-    // Plusieurs lignes ont pu changer de camp (la tâche ET ses étapes) : la
-    // reconstruction est le seul déplacement qui reste juste dans tous les cas.
-    rebuildRows();
+
+    // Cocher ne déplace pas la ligne : l'état fait/à faire ne fait pas partie du
+    // tri (rowLessThan). La ligne change d'apparence, pas de place — même quand
+    // la cascade touche aussi les étapes ou la tâche parente.
+    rebuildStepCounts();
+    bool stepsRolesEmitted = false;
+    for (const auto &dirtyId : dirtyIds) {
+        const int pos = findRow(QString::fromStdString(dirtyId));
+        if (pos < 0) continue;
+        auto src = std::find_if(m_items.begin(), m_items.end(),
+                                [&](const core::Item &i){ return i.itemId == dirtyId; });
+        if (src == m_items.end()) continue;
+        m_rows[static_cast<size_t>(pos)].item = *src;
+        QList<int> roles{ DoneRole, DoneAtRole };
+        if (dirtyId == stepsTaskId) {
+            roles << StepsTotalRole << StepsDoneRole;
+            stepsRolesEmitted = true;
+        }
+        const QModelIndex idx = index(pos);
+        emit dataChanged(idx, idx, roles);
+    }
+    // Progression des étapes sur la tâche, même si son `done` n'a pas bougé
+    // (ex. 1ʳᵉ étape sur 3 cochée).
+    if (!stepsTaskId.empty() && !stepsRolesEmitted) {
+        const int pos = findRow(QString::fromStdString(stepsTaskId));
+        if (pos >= 0) {
+            const QModelIndex idx = index(pos);
+            emit dataChanged(idx, idx, { StepsTotalRole, StepsDoneRole });
+        }
+    }
+
+    // Le nombre de lignes n'a pas bougé, mais la progression (mode Chantier /
+    // barre d'étapes) oui.
+    emit doneCountChanged();
+    emit refreshed();
 }
 
 void ItemModel::editItem(const QString &itemId, const QString &name,
@@ -616,11 +659,20 @@ void ItemModel::setDue(const QString &itemId, double dueMs) {
 
     auto it = std::find_if(m_items.begin(), m_items.end(),
                            [&](const core::Item &i){ return i.itemId == id; });
-    if (it == m_items.end() || it->due == due) return;
+    if (it == m_items.end()) return;
+
+    // Poser une date efface l'échéance texte ; retirer la date (0) laisse dueNote.
+    const bool clearNote = (due > 0);
+    if (it->due == due && (!clearNote || it->dueNote.empty())) return;
 
     const int64_t lamport = m_db->bumpLamport(m_listId);
+    const core::Ver ver{ lamport, m_deviceId };
     it->due     = due;
-    it->dueVer  = { lamport, m_deviceId };
+    it->dueVer  = ver;
+    if (clearNote) {
+        it->dueNote    = {};
+        it->dueNoteVer = ver;
+    }
     it->touched = QDateTime::currentMSecsSinceEpoch();
 
     if (!m_db->upsertItem(*it)) return;
@@ -632,7 +684,44 @@ void ItemModel::setDue(const QString &itemId, double dueMs) {
     if (pos >= 0) {
         m_rows[static_cast<size_t>(pos)].item = *it;
         const QModelIndex idx = index(pos);
-        emit dataChanged(idx, idx, { DueRole });
+        emit dataChanged(idx, idx, { DueRole, DueNoteRole });
+    }
+    emit refreshed();
+}
+
+void ItemModel::setDueNote(const QString &itemId, const QString &note) {
+    if (!m_db) return;
+
+    const std::string id      = itemId.toStdString();
+    const std::string newNote = note.trimmed().toStdString();
+
+    auto it = std::find_if(m_items.begin(), m_items.end(),
+                           [&](const core::Item &i){ return i.itemId == id; });
+    if (it == m_items.end()) return;
+
+    // Texte non vide → effacer la date ; texte vide → seulement vider dueNote.
+    const bool clearDue = !newNote.empty() && it->due != 0;
+    if (it->dueNote == newNote && !clearDue) return;
+
+    const int64_t lamport = m_db->bumpLamport(m_listId);
+    const core::Ver ver{ lamport, m_deviceId };
+    it->dueNote    = newNote;
+    it->dueNoteVer = ver;
+    if (clearDue) {
+        it->due    = 0;
+        it->dueVer = ver;
+    }
+    it->touched = QDateTime::currentMSecsSinceEpoch();
+
+    if (!m_db->upsertItem(*it)) return;
+
+    emit localChanged(m_listId);
+
+    const int pos = findRow(itemId);
+    if (pos >= 0) {
+        m_rows[static_cast<size_t>(pos)].item = *it;
+        const QModelIndex idx = index(pos);
+        emit dataChanged(idx, idx, { DueNoteRole, DueRole });
     }
     emit refreshed();
 }
@@ -750,14 +839,13 @@ void ItemModel::moveItem(int from, int to) {
         ? moved.aisle
         : (hovered ? hovered->item.aisle : moved.aisle);
 
-    // Les voisins qui comptent pour la position sont ceux du même groupe : même état
-    // (à faire / fait), et — en mode catégorie seulement — même catégorie. Le tri les
-    // sépare avant de regarder la position. Les étapes forment un seul groupe : leur
-    // tri ignore l'état.
+    // Les voisins qui comptent pour la position sont ceux du même groupe : même
+    // catégorie en mode catégorie, toute la liste en mode manuel / étapes. Le tri
+    // les sépare avant de regarder la position. L'état fait/à faire ne compte pas :
+    // il n'est pas trié.
     const auto sameGroup = [&](const Row *r) {
         if (stepsMode()) return r != nullptr;
-        return r && r->item.done == moved.done
-            && (m_manualSort || r->item.aisle == targetAisle);
+        return r && (m_manualSort || r->item.aisle == targetAisle);
     };
     const int64_t lo = sameGroup(before) ? before->item.order : 0;
     const int64_t hi = sameGroup(after)  ? after->item.order  : 0;
@@ -775,7 +863,7 @@ void ItemModel::moveItem(int from, int to) {
     // Intervalle épuisé (des milliers de déplacements au même endroit) : renuméroter
     // le groupe à grands pas plutôt que d'écraser silencieusement l'ordre voulu.
     if (lo && hi && (order == lo || order == hi)) {
-        renumber(targetAisle, moved.done);
+        renumber(targetAisle);
         moveItem(from, to);   // les positions sont ré-espacées : rejouer le geste
         return;
     }
@@ -822,8 +910,9 @@ void ItemModel::moveItem(int from, int to) {
     emit dataChanged(idx, idx, { AisleRole });
 }
 
-// Ré-espace les positions d'un groupe (même rayon, même état) par pas de 1000.
-void ItemModel::renumber(const std::string &aisle, bool done) {
+// Ré-espace les positions d'un groupe (même catégorie ; toute la liste en mode
+// manuel / étapes) par pas de 1000.
+void ItemModel::renumber(const std::string &aisle) {
     if (!m_db) return;
 
     const int64_t lamport = m_db->bumpLamport(m_listId);
@@ -831,10 +920,9 @@ void ItemModel::renumber(const std::string &aisle, bool done) {
 
     int64_t next = 1000;
     for (auto &row : m_rows) {
-        // En mode manuel la catégorie ne délimite pas le groupe : seul l'état compte.
-        // Les étapes forment un seul groupe (leur tri ignore l'état).
-        if (!stepsMode()
-            && (row.item.done != done || (!m_manualSort && row.item.aisle != aisle)))
+        // En mode manuel / étapes la catégorie ne délimite pas le groupe.
+        // Le statut `done` n'entre pas dans la définition du groupe.
+        if (!stepsMode() && !m_manualSort && row.item.aisle != aisle)
             continue;
         auto it = std::find_if(m_items.begin(), m_items.end(),
                                [&](const core::Item &i){ return i.itemId == row.item.itemId; });

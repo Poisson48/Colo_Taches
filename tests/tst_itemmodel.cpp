@@ -86,7 +86,8 @@ private slots:
         QVERIFY(items[1].nameVer.lamport < items[2].nameVer.lamport);
     }
 
-    // 3. toggleDone → item moves to bottom group, correct re-ordering.
+    // 3. toggleDone → la tâche change d'état SANS bouger : cocher ne réorganise pas
+    // la liste (ni chez soi ni, via la synchro, chez les autres).
     void test_toggleDone_reorder() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
@@ -103,21 +104,22 @@ private slots:
 
         QCOMPARE(model.rowCount(), 3);
 
-        // Toggle first item (A) → it should move to the bottom.
+        // Cocher le premier article (A) : il reste à sa place, coché.
         const QString idA = model.data(model.index(0), ItemModel::ItemIdRole).toString();
         model.toggleDone(idA);
 
         QCOMPARE(model.rowCount(), 3);
-        // A is now done → must be last.
-        QCOMPARE(model.data(model.index(2), ItemModel::ItemIdRole).toString(), idA);
-        QCOMPARE(model.data(model.index(2), ItemModel::DoneRole).toBool(), true);
+        QCOMPARE(model.data(model.index(0), ItemModel::ItemIdRole).toString(), idA);
+        QCOMPARE(model.data(model.index(0), ItemModel::DoneRole).toBool(), true);
 
-        // B and C still unchecked, in order.
-        QCOMPARE(model.data(model.index(0), ItemModel::NameRole).toString(), "B");
-        QCOMPARE(model.data(model.index(1), ItemModel::NameRole).toString(), "C");
+        // B et C n'ont pas bougé non plus.
+        QCOMPARE(model.data(model.index(0), ItemModel::NameRole).toString(), "A");
+        QCOMPARE(model.data(model.index(1), ItemModel::NameRole).toString(), "B");
+        QCOMPARE(model.data(model.index(2), ItemModel::NameRole).toString(), "C");
 
-        // Toggle A again → should come back to the top.
+        // Décocher A : toujours à sa place.
         model.toggleDone(idA);
+        QCOMPARE(model.data(model.index(0), ItemModel::ItemIdRole).toString(), idA);
         QCOMPARE(model.data(model.index(0), ItemModel::DoneRole).toBool(), false);
 
         // Verify done field in DB has doneVer with lamport > 0.
@@ -205,13 +207,12 @@ private slots:
             model.addItem("Beta",    "");
             model.addItem("Gamma",   "2");
 
-            // toggle Beta (row 1)
+            // toggle Beta (row 1) — cocher ne déplace pas : l'ordre reste
+            // Alpha(0), Beta(1), Gamma(2)
             const QString idBeta = model.data(model.index(1), ItemModel::ItemIdRole).toString();
             model.toggleDone(idBeta);
 
-            // remove Gamma (now row 1 = Gamma since Beta moved to bottom)
-            // After toggle: Alpha(0), Gamma(1), Beta(2)
-            const QString idGamma = model.data(model.index(1), ItemModel::ItemIdRole).toString();
+            const QString idGamma = model.data(model.index(2), ItemModel::ItemIdRole).toString();
             model.removeItem(idGamma);
         }
 
@@ -354,8 +355,12 @@ private slots:
         model.addItem("Lait", "");
         model.addItem("Pain", "");
 
-        model.toggleDone(model.data(model.index(0), ItemModel::ItemIdRole).toString());
-        model.toggleDone(model.data(model.index(0), ItemModel::ItemIdRole).toString());
+        // `toggleDone` ne déplace pas la ligne : on bascule les deux articles
+        // explicitement, sans dépendre d'un éventuel changement d'index.
+        const QString idLait = model.data(model.index(0), ItemModel::ItemIdRole).toString();
+        const QString idPain = model.data(model.index(1), ItemModel::ItemIdRole).toString();
+        model.toggleDone(idLait);
+        model.toggleDone(idPain);
         QCOMPARE(model.doneCount(), 2);
 
         QSignalSpy localSpy(&model, &ItemModel::localChanged);
@@ -390,7 +395,7 @@ private slots:
         model.addItem("Pain", "");
         model.addItem("Œufs", "");
 
-        // Cocher « Lait » : il passe en bas du tri, mais reste le même article.
+        // Cocher « Lait » : il reste à sa place (le tri ignore `done`).
         const QString lait = model.data(model.index(0), ItemModel::ItemIdRole).toString();
         model.toggleDone(lait);
         QCOMPARE(model.doneCount(), 1);
@@ -526,18 +531,18 @@ private slots:
 
         QCOMPARE(model.aisleCount(), 4);
 
-        // Un article coché descend au bas de SON rayon, pas au bas de la liste : on
-        // parcourt le magasin rayon par rayon.
+        // Un article coché ne bouge pas : le tri ignore l'état fait/à faire, et
+        // ne dépend que de la catégorie (en mode catégorie) puis de la position.
         model.addItem("Carottes", "", "", "Ménage");
         const QString pommes = model.data(model.index(0), ItemModel::ItemIdRole).toString();
         model.toggleDone(pommes);
 
         QCOMPARE(model.data(model.index(0), ItemModel::NameRole).toString(),
-                 QStringLiteral("Carottes"));   // reste à prendre
+                 QStringLiteral("Pommes"));     // reste à sa place, mais devient coché
         QCOMPARE(model.data(model.index(1), ItemModel::NameRole).toString(),
-                 QStringLiteral("Pommes"));     // pris, mais toujours dans son rayon
+                 QStringLiteral("Carottes"));  // reste non coché
         QCOMPARE(model.data(model.index(2), ItemModel::NameRole).toString(),
-                 QStringLiteral("Beurre"));     // le rayon suivant n'a pas bougé
+                 QStringLiteral("Beurre"));     // la catégorie suivante n'a pas bougé
     }
 
     // Rayon inventé : il voyage avec l'article (le champ porte le libellé), donc il
@@ -1291,6 +1296,36 @@ private slots:
         // Retirer l'échéance : retour à 0, version qui avance.
         model.setDue(id, 0);
         QCOMPARE(model.data(model.index(0), ItemModel::DueRole).toLongLong(), int64_t(0));
+
+        // Échéance texte : alternative à la date — poser l'un vide l'autre.
+        model.setDue(id, 1722000000000.0);
+        model.setDueNote(id, QStringLiteral("avant que ça ne pue"));
+        QCOMPARE(model.data(model.index(0), ItemModel::DueNoteRole).toString(),
+                 QStringLiteral("avant que ça ne pue"));
+        QCOMPARE(model.data(model.index(0), ItemModel::DueRole).toLongLong(), int64_t(0));
+        QCOMPARE(model.get(id).value(QStringLiteral("dueNote")).toString(),
+                 QStringLiteral("avant que ça ne pue"));
+
+        for (const auto &it : db.getItems(listId)) {
+            if (it.itemId != id.toStdString()) continue;
+            QCOMPARE(it.dueNote, std::string("avant que ça ne pue"));
+            QVERIFY(it.dueNoteVer.lamport > 0);
+            QCOMPARE(it.due, int64_t(0));
+        }
+
+        // Poser une date efface le texte.
+        model.setDue(id, 1722000000000.0);
+        QCOMPARE(model.data(model.index(0), ItemModel::DueRole).toLongLong(),
+                 int64_t(1722000000000LL));
+        QCOMPARE(model.data(model.index(0), ItemModel::DueNoteRole).toString(),
+                 QString());
+
+        // Vider un dueNote déjà vide ne touche pas la date.
+        model.setDueNote(id, QString());
+        QCOMPARE(model.data(model.index(0), ItemModel::DueRole).toLongLong(),
+                 int64_t(1722000000000LL));
+        QCOMPARE(model.data(model.index(0), ItemModel::DueNoteRole).toString(),
+                 QString());
     }
 
     // L'historique consigne chaque tâche faite — et survit à son retrait de la liste.

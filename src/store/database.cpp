@@ -102,6 +102,7 @@ bool Database::createSchema()
             "  aisle TEXT, aisle_l INT, aisle_d TEXT,"
             "  image TEXT, image_l INT, image_d TEXT,"
             "  due INT,   due_l INT,   due_d TEXT,"
+            "  due_note TEXT, due_note_l INT, due_note_d TEXT,"
             // « order » est un mot réservé SQL : la colonne s'appelle sort_order.
             "  sort_order INT, sort_order_l INT, sort_order_d TEXT,"
             "  done INT,   done_l INT,  done_d TEXT,"
@@ -228,6 +229,10 @@ bool Database::migrateSchema()
         { QStringLiteral("due"),   QStringLiteral("due INT DEFAULT 0") },
         { QStringLiteral("due_l"), QStringLiteral("due_l INT DEFAULT 0") },
         { QStringLiteral("due_d"), QStringLiteral("due_d TEXT DEFAULT ''") },
+        // Échéance texte : absente des bases antérieures → "" en {0,""}.
+        { QStringLiteral("due_note"),   QStringLiteral("due_note TEXT DEFAULT ''") },
+        { QStringLiteral("due_note_l"), QStringLiteral("due_note_l INT DEFAULT 0") },
+        { QStringLiteral("due_note_d"), QStringLiteral("due_note_d TEXT DEFAULT ''") },
     };
 
     const bool hadOrder = existing.contains(QStringLiteral("sort_order"));
@@ -702,11 +707,12 @@ bool Database::upsertItem(const core::Item& item)
         "  aisle, aisle_l, aisle_d,"
         "  image, image_l, image_d,"
         "  due,   due_l,   due_d,"
+        "  due_note, due_note_l, due_note_d,"
         "  sort_order, sort_order_l, sort_order_d,"
         "  done, done_l, done_d, done_at,"
         "  del,  del_l,  del_d,"
         "  touched)"
-        " VALUES (?,?,?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?,?, ?,?,?, ?)"
+        " VALUES (?,?,?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?, ?,?,?,?, ?,?,?, ?)"
         " ON CONFLICT(list_id, item_id) DO UPDATE SET"
         "  name   = excluded.name,   name_l = excluded.name_l,   name_d = excluded.name_d,"
         "  qty    = excluded.qty,    qty_l  = excluded.qty_l,    qty_d  = excluded.qty_d,"
@@ -714,6 +720,9 @@ bool Database::upsertItem(const core::Item& item)
         "  aisle  = excluded.aisle,  aisle_l = excluded.aisle_l, aisle_d = excluded.aisle_d,"
         "  image  = excluded.image,  image_l = excluded.image_l, image_d = excluded.image_d,"
         "  due    = excluded.due,    due_l  = excluded.due_l,    due_d  = excluded.due_d,"
+        "  due_note   = excluded.due_note,"
+        "  due_note_l = excluded.due_note_l,"
+        "  due_note_d = excluded.due_note_d,"
         "  sort_order   = excluded.sort_order,"
         "  sort_order_l = excluded.sort_order_l,"
         "  sort_order_d = excluded.sort_order_d,"
@@ -744,6 +753,9 @@ bool Database::upsertItem(const core::Item& item)
     q.addBindValue(ll(item.due));
     q.addBindValue(ll(item.dueVer.lamport));
     q.addBindValue(qs(item.dueVer.deviceId));
+    q.addBindValue(qs(item.dueNote));
+    q.addBindValue(ll(item.dueNoteVer.lamport));
+    q.addBindValue(qs(item.dueNoteVer.deviceId));
     q.addBindValue(ll(item.order));
     q.addBindValue(ll(item.orderVer.lamport));
     q.addBindValue(qs(item.orderVer.deviceId));
@@ -782,6 +794,7 @@ std::vector<core::Item> Database::getItems(const std::string& listId)
         "  aisle, aisle_l, aisle_d,"
         "  image, image_l, image_d,"
         "  due,   due_l,   due_d,"
+        "  due_note, due_note_l, due_note_d,"
         "  sort_order, sort_order_l, sort_order_d,"
         "  done, done_l, done_d, done_at,"
         "  del,  del_l,  del_d,"
@@ -811,14 +824,16 @@ std::vector<core::Item> Database::getItems(const std::string& listId)
         it.imageVer    = verFromCols(q.value(17).toLongLong(), q.value(18).toString());
         it.due         = q.value(19).toLongLong();
         it.dueVer      = verFromCols(q.value(20).toLongLong(), q.value(21).toString());
-        it.order       = q.value(22).toLongLong();
-        it.orderVer    = verFromCols(q.value(23).toLongLong(), q.value(24).toString());
-        it.done        = q.value(25).toInt() != 0;
-        it.doneVer     = verFromCols(q.value(26).toLongLong(), q.value(27).toString());
-        it.doneAt      = q.value(28).toLongLong();
-        it.del         = q.value(29).toInt() != 0;
-        it.delVer      = verFromCols(q.value(30).toLongLong(), q.value(31).toString());
-        it.touched     = q.value(32).toLongLong();
+        it.dueNote     = ss(q.value(22).toString());
+        it.dueNoteVer  = verFromCols(q.value(23).toLongLong(), q.value(24).toString());
+        it.order       = q.value(25).toLongLong();
+        it.orderVer    = verFromCols(q.value(26).toLongLong(), q.value(27).toString());
+        it.done        = q.value(28).toInt() != 0;
+        it.doneVer     = verFromCols(q.value(29).toLongLong(), q.value(30).toString());
+        it.doneAt      = q.value(31).toLongLong();
+        it.del         = q.value(32).toInt() != 0;
+        it.delVer      = verFromCols(q.value(33).toLongLong(), q.value(34).toString());
+        it.touched     = q.value(35).toLongLong();
 
         // Base d'avant la position manuelle, ou article créé par un pair qui l'ignore :
         // la date de création fait une position de départ cohérente avec l'affichage.

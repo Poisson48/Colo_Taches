@@ -40,6 +40,11 @@ bool mergeItem(Item& local, const Item& remote) {
         local.dueVer = remote.dueVer;
         changed = true;
     }
+    if (remote.dueNoteVer > local.dueNoteVer) {
+        local.dueNote    = remote.dueNote;
+        local.dueNoteVer = remote.dueNoteVer;
+        changed = true;
+    }
     if (remote.orderVer > local.orderVer) {
         local.order    = remote.order;
         local.orderVer = remote.orderVer;

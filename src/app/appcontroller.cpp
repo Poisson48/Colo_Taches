@@ -1210,6 +1210,13 @@ QByteArray compressTaskImage(const QString &path) {
 }
 } // namespace
 
+QString AppController::tempPhotoPath() const {
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    QDir().mkpath(dir);
+    return QDir(dir).filePath(
+        QStringLiteral("colotaches-%1.jpg").arg(QDateTime::currentMSecsSinceEpoch()));
+}
+
 bool AppController::setTaskImage(const QString &itemId, const QUrl &fileUrl) {
     if (m_openListId.empty()) return false;
 

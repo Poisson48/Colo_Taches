@@ -258,6 +258,8 @@ static void test_ParentAndImageRoundTrip() {
     task.imageVer = makeVer(3, "devA");
     task.due      = 1722000000000LL;
     task.dueVer   = makeVer(4, "devA");
+    task.dueNote    = "avant que ça ne pue";
+    task.dueNoteVer = makeVer(5, "devA");
     p.items.push_back(task);
 
     auto parsed = parsePayload(serializePayload(p));
@@ -269,11 +271,15 @@ static void test_ParentAndImageRoundTrip() {
     EXPECT_EQ(parsed->items[1].imageVer.lamport, int64_t(3));
     EXPECT_EQ(parsed->items[1].due, int64_t(1722000000000LL));
     EXPECT_EQ(parsed->items[1].dueVer.lamport, int64_t(4));
+    EXPECT_EQ(parsed->items[1].dueNote, "avant que ça ne pue");
+    EXPECT_EQ(parsed->items[1].dueNoteVer.lamport, int64_t(5));
     // Une image ou une échéance absente vaut « rien » en version {0,""}.
     EXPECT_EQ(parsed->items[0].image, "");
     EXPECT_EQ(parsed->items[0].imageVer.lamport, int64_t(0));
     EXPECT_EQ(parsed->items[0].due, int64_t(0));
     EXPECT_EQ(parsed->items[0].dueVer.lamport, int64_t(0));
+    EXPECT_EQ(parsed->items[0].dueNote, "");
+    EXPECT_EQ(parsed->items[0].dueNoteVer.lamport, int64_t(0));
 }
 
 // Blob d'une photo : l'événement « img » fait l'aller-retour octet pour octet.

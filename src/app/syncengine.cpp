@@ -391,6 +391,7 @@ void SyncEngine::onRelayEvent(const net::NostrEvent& ev)
                                item.aisleVer.lamport,
                                item.imageVer.lamport,
                                item.dueVer.lamport,
+                               item.dueNoteVer.lamport,
                                item.orderVer.lamport,
                                item.doneVer.lamport,
                                item.delVer.lamport});
@@ -414,11 +415,16 @@ void SyncEngine::onRelayEvent(const net::NostrEvent& ev)
 
     const auto changedIds = core::mergeItems(localMap, payload.items);
 
-    // Upsert changed items in DB.
+    // Upsert changed items in DB. touched = heure de publication de l'événement
+    // (≈ heure de la modif chez l'auteur), pas l'heure locale de réception — sinon
+    // la notification afficherait « à l'instant » pour une modif d'il y a une heure.
+    const int64_t eventMs = ev.created_at * 1000;
     for (const auto& iid : changedIds) {
         auto mit = localMap.find(iid);
-        if (mit != localMap.end())
+        if (mit != localMap.end()) {
+            mit->second.touched = eventMs;
             m_db->upsertItem(mit->second);
+        }
     }
 
     // Merge title if present.
@@ -503,7 +509,8 @@ void SyncEngine::onRelayEvent(const net::NostrEvent& ev)
         emit remoteChanges(QString::fromStdString(listId), count, authorName);
 
     if (count > 0 && !ownEvent) {
-        // System notification.
+        // System notification — horodatée sur la dernière modif (touched), pas
+        // sur l'heure de réception.
         auto metaOpt3 = m_db->getList(listId);
         const QString listTitle = metaOpt3
             ? QString::fromStdString(metaOpt3->title)
@@ -511,7 +518,13 @@ void SyncEngine::onRelayEvent(const net::NostrEvent& ev)
 
         const QString body = QString("%1 tâche(s) modifiée(s) par %2")
                                  .arg(count).arg(authorName);
-        showNotification(listTitle, body);
+        qint64 whenMs = 0;
+        for (const auto& iid : changedIds) {
+            const auto mit = localMap.find(iid);
+            if (mit == localMap.end()) continue;
+            whenMs = std::max(whenMs, static_cast<qint64>(mit->second.touched));
+        }
+        showNotification(listTitle, body, whenMs);
     }
 }
 
@@ -670,10 +683,10 @@ void SyncEngine::resetDeltaCounter(const std::string& listId)
     m_db->setSetting(std::string(kLastSnapKey) + listId, std::to_string(nowMs));
 }
 
-void SyncEngine::showNotification(const QString& title, const QString& body)
+void SyncEngine::showNotification(const QString& title, const QString& body, qint64 whenMs)
 {
     // Android : notification système via JNI. Ailleurs : no-op, on retombe sur le tray.
-    if (platformNotify(title, body))
+    if (platformNotify(title, body, whenMs))
         return;
 
 #if QT_FEATURE_systemtrayicon == 1 && defined(QT_WIDGETS_LIB)

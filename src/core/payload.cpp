@@ -204,6 +204,10 @@ std::optional<Payload> parsePayload(const std::string& jsonStr) {
             if (f.contains("due")) {
                 if (parseVersionedField(f["due"], item.due, item.dueVer)) anyField = true;
             }
+            // Absent des payloads antérieurs : échéance texte vide en {0,""}.
+            if (f.contains("dueNote")) {
+                if (parseVersionedField(f["dueNote"], item.dueNote, item.dueNoteVer)) anyField = true;
+            }
             if (f.contains("order")) {
                 if (parseVersionedField(f["order"], item.order, item.orderVer)) anyField = true;
             }
@@ -308,8 +312,9 @@ std::string serializePayload(const Payload& p) {
         f["note"]  = json::array({item.note,  verToJson(item.noteVer)});
         f["aisle"] = json::array({item.aisle, verToJson(item.aisleVer)});
         f["image"] = json::array({item.image, verToJson(item.imageVer)});
-        f["due"]   = json::array({item.due,   verToJson(item.dueVer)});
-        f["order"] = json::array({item.order, verToJson(item.orderVer)});
+        f["due"]     = json::array({item.due,     verToJson(item.dueVer)});
+        f["dueNote"] = json::array({item.dueNote, verToJson(item.dueNoteVer)});
+        f["order"]   = json::array({item.order,   verToJson(item.orderVer)});
         f["done"] = json::array({item.done, verToJson(item.doneVer)});
         f["del"]  = json::array({item.del,  verToJson(item.delVer)});
         ji["f"]   = f;

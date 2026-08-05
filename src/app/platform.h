@@ -12,8 +12,9 @@ namespace app {
 // À appeler une fois au démarrage.
 void initNotifications();
 
-// Notification système native. false → l'appelant retombe sur QSystemTrayIcon.
-bool platformNotify(const QString& title, const QString& body);
+// Notification système native. whenMs > 0 → horodatage affiché (heure de modif).
+// false → l'appelant retombe sur QSystemTrayIcon.
+bool platformNotify(const QString& title, const QString& body, qint64 whenMs = 0);
 
 // Feuille de partage native (ACTION_SEND). false → l'appelant copie le texte.
 bool platformShare(const QString& text);

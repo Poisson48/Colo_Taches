@@ -58,6 +58,13 @@ public class Platform {
     }
 
     public static void showNotification(Context ctx, String title, String body) {
+        showNotification(ctx, title, body, 0L);
+    }
+
+    // whenMs > 0 : horodatage de la notification = heure de la modification
+    // (pas l'heure de réception). setShowWhen(true) pour l'afficher dans le tiroir.
+    public static void showNotification(Context ctx, String title, String body,
+                                        long whenMs) {
         if (ctx == null)
             return;
         createChannel(ctx);
@@ -71,6 +78,11 @@ public class Platform {
                 .setContentText(body)
                 .setStyle(new Notification.BigTextStyle().bigText(body))
                 .setAutoCancel(true);
+
+        if (whenMs > 0) {
+            builder.setWhen(whenMs);
+            builder.setShowWhen(true);
+        }
 
         // Tap sur la notif → ouvre l'app.
         Intent open = ctx.getPackageManager().getLaunchIntentForPackage(ctx.getPackageName());

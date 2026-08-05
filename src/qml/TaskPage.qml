@@ -67,7 +67,11 @@ Item {
             onTriggered: editDialog.openFor(root.task)
         }
         MenuItem {
-            text: "Ajouter une photo"
+            text: "Prendre une photo"
+            onTriggered: root.capturePhoto()
+        }
+        MenuItem {
+            text: "Choisir une photo"
             onTriggered: root.pickPhoto()
         }
         MenuSeparator {}
@@ -77,11 +81,24 @@ Item {
         }
     }
 
-    // Sélecteur d'images du système, chargé au premier besoin seulement :
-    // QtQuick.Dialogs peut manquer sur certains kits de bureau, et la page doit
-    // vivre (et se charger sans bruit) sans lui.
+    // Sélecteur de fichiers / capture caméra, chargés au premier besoin.
+    Loader { id: pickers }
     Loader {
-        id: pickers
+        id: cameraCapture
+        anchors.fill: parent
+        z: 20
+        active: false
+        visible: status === Loader.Ready
+        onLoaded: {
+            item.itemId = root.itemId
+            item.captured.connect(function(path) {
+                AppController.setTaskImage(root.itemId, "file://" + path)
+            })
+            item.closeRequested.connect(function() {
+                cameraCapture.active = false
+                cameraCapture.source = ""
+            })
+        }
     }
 
     function pickPhoto() {
@@ -91,6 +108,14 @@ Item {
             pickers.item.openPhoto(root.itemId)
         else
             AppController.toast("Sélecteur de fichiers indisponible")
+    }
+
+    function capturePhoto() {
+        // PhotoCapture.qml n'est embarqué que si COLO_HAS_CAMERA (comme ScanPage).
+        cameraCapture.source = "PhotoCapture.qml"
+        cameraCapture.active = true
+        if (cameraCapture.status === Loader.Error)
+            AppController.toast("Caméra indisponible sur cet appareil")
     }
 
     // Échéance en clair : « pour demain », « en retard (3 juil.) »… "" si aucune.
@@ -231,15 +256,22 @@ Item {
                     flat: true
                     implicitHeight: 40
                     contentItem: Label {
-                        text: root.task && root.task.due > 0
-                              ? "Échéance : " + root.dueText(root.task.due)
-                              : "＋  Ajouter une échéance"
+                        text: {
+                            if (!root.task) return "＋  Ajouter une échéance"
+                            if (root.task.dueNote && root.task.dueNote.length > 0)
+                                return "Échéance : " + root.task.dueNote
+                            if (root.task.due > 0)
+                                return "Échéance : " + root.dueText(root.task.due)
+                            return "＋  Ajouter une échéance"
+                        }
                         color: root.task && root.isOverdue(root.task.due) && !root.task.done
+                               && !(root.task.dueNote && root.task.dueNote.length > 0)
                                ? Theme.danger : Theme.accent
                         font.pixelSize: 13
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                         elide: Text.ElideRight
+                        wrapMode: Text.WordWrap
                     }
                     background: Rectangle {
                         radius: 10
@@ -249,13 +281,15 @@ Item {
                     }
                     onClicked: {
                         dueDialog.targetStep = ""
-                        dueDialog.openFor(root.task && root.task.due ? root.task.due : 0)
+                        dueDialog.openFor(root.task && root.task.due ? root.task.due : 0,
+                                          root.task && root.task.dueNote ? root.task.dueNote : "")
                     }
                 }
 
-                // Vers l'agenda du téléphone (ou un .ics sur ordinateur).
+                // Vers l'agenda du téléphone (ou un .ics sur ordinateur) — dates seules.
                 Button {
                     visible: root.task && root.task.due > 0
+                             && !(root.task.dueNote && root.task.dueNote.length > 0)
                     flat: true
                     implicitHeight: 40
                     contentItem: Label {
@@ -437,28 +471,32 @@ Item {
                                     color: model.done ? Theme.textDim : Theme.text
                                     font.pixelSize: 15
                                     font.strikeout: model.done
-                                    elide: Text.ElideRight
+                                    wrapMode: Text.WordWrap
                                 }
 
                                 Label {
                                     Layout.fillWidth: true
-                                    visible: model.due > 0
-                                    text: root.dueText(model.due)
+                                    visible: (model.dueNote && model.dueNote.length > 0)
+                                             || model.due > 0
+                                    text: (model.dueNote && model.dueNote.length > 0)
+                                          ? model.dueNote : root.dueText(model.due)
                                     color: root.isOverdue(model.due) && !model.done
+                                           && !(model.dueNote && model.dueNote.length > 0)
                                            ? Theme.danger : Theme.textDim
                                     font.pixelSize: 12
-                                    elide: Text.ElideRight
+                                    wrapMode: Text.WordWrap
                                 }
 
                                 // Le texte de l'étape est la poignée de son menu.
                                 TapHandler {
                                     onTapped: {
-                                        stepMenu.stepId    = model.itemId
-                                        stepMenu.stepName  = model.name
-                                        stepMenu.stepDue   = model.due
-                                        stepMenu.stepQty   = model.qty
-                                        stepMenu.stepNote  = model.note
-                                        stepMenu.stepAisle = model.aisle
+                                        stepMenu.stepId      = model.itemId
+                                        stepMenu.stepName    = model.name
+                                        stepMenu.stepDue     = model.due
+                                        stepMenu.stepDueNote = model.dueNote || ""
+                                        stepMenu.stepQty     = model.qty
+                                        stepMenu.stepNote    = model.note
+                                        stepMenu.stepAisle   = model.aisle
                                         stepMenu.popup()
                                     }
                                 }
@@ -492,42 +530,27 @@ Item {
                 }
             }
 
-            // Ajout d'étape, sous la dernière : le flux naturel d'un découpage.
-            RowLayout {
+            // Ajout d'étape : bouton qui ouvre une modale centrée (évite que le
+            // clavier cache le champ en bas d'une longue liste).
+            Button {
                 Layout.fillWidth: true
-                spacing: 8
-
-                ColoTextField {
-                    id: stepField
-                    Layout.fillWidth: true
-                    hint: "Ajouter une étape"
-                    onAccepted: root.addStep()
+                flat: true
+                implicitHeight: Theme.touchTarget
+                contentItem: Label {
+                    text: "＋  Ajouter une étape"
+                    color: Theme.accent
+                    font.pixelSize: 14
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
                 }
-
-                RoundButton {
-                    id: addStepButton
-                    Layout.preferredWidth: 44
-                    Layout.preferredHeight: 44
-                    enabled: stepField.text.trim().length > 0
-
-                    background: Rectangle {
-                        radius: width / 2
-                        color: !addStepButton.enabled ? Theme.surfaceHigh
-                             : (addStepButton.pressed ? Theme.accentDim : Theme.accent)
-                    }
-
-                    contentItem: Label {
-                        text: "+"
-                        color: addStepButton.enabled ? Theme.onAccent : Theme.textDim
-                        font.pixelSize: 20
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-
-                    onClicked: root.addStep()
+                background: Rectangle {
+                    radius: 12
+                    color: parent.pressed ? Theme.surfaceHigh : Theme.surface
+                    border.color: Theme.outline
+                    border.width: 1
                 }
+                onClicked: addStepDialog.open()
             }
-
 
             // --- Photos (plusieurs : l'état avant, le résultat après…) ---
             Repeater {
@@ -601,38 +624,80 @@ Item {
             }
 
             // Toujours proposer une photo de plus : l'avant appelle son après.
-            Button {
+            RowLayout {
                 Layout.fillWidth: true
-                flat: true
-                implicitHeight: Theme.touchTarget
-                contentItem: Label {
-                    text: root.photoShas.length > 0 ? "＋  Ajouter une autre photo"
-                                                    : "＋  Ajouter une photo"
-                    color: Theme.accent
-                    font.pixelSize: 14
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                spacing: 8
+
+                Button {
+                    Layout.fillWidth: true
+                    flat: true
+                    implicitHeight: Theme.touchTarget
+                    contentItem: Label {
+                        text: "Prendre une photo"
+                        color: Theme.accent
+                        font.pixelSize: 14
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 10
+                        color: parent.pressed ? Theme.surfaceHigh : "transparent"
+                        border.color: Theme.outline
+                        border.width: 1
+                    }
+                    onClicked: root.capturePhoto()
                 }
-                background: Rectangle {
-                    radius: 10
-                    color: parent.pressed ? Theme.surfaceHigh : "transparent"
-                    border.color: Theme.outline
-                    border.width: 1
+
+                Button {
+                    Layout.fillWidth: true
+                    flat: true
+                    implicitHeight: Theme.touchTarget
+                    contentItem: Label {
+                        text: "Choisir dans la galerie"
+                        color: Theme.accent
+                        font.pixelSize: 14
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 10
+                        color: parent.pressed ? Theme.surfaceHigh : "transparent"
+                        border.color: Theme.outline
+                        border.width: 1
+                    }
+                    onClicked: root.pickPhoto()
                 }
-                onClicked: root.pickPhoto()
             }
 
             Item { Layout.preferredHeight: 8 }
         }
     }
 
-    function addStep() {
-        const name = stepField.text.trim()
-        if (name.length === 0)
+    function addStep(name) {
+        const n = (name || "").trim()
+        if (n.length === 0)
             return
-        AppController.steps.addItem(name, "", "", "")
-        stepField.text = ""
-        stepField.forceActiveFocus()
+        AppController.steps.addItem(n, "", "", "")
+    }
+
+    ColoDialog {
+        id: addStepDialog
+        title: "Nouvelle étape"
+        acceptText: "Ajouter"
+        acceptEnabled: addStepName.text.trim().length > 0
+
+        ColoTextField {
+            id: addStepName
+            Layout.fillWidth: true
+            hint: "Étape"
+            onAccepted: if (addStepDialog.acceptEnabled) addStepDialog.accept()
+        }
+
+        onOpened: {
+            addStepName.text = ""
+            addStepName.forceActiveFocus()
+        }
+        onAccepted: root.addStep(addStepName.text)
     }
 
     // --- Photo en plein écran ---
@@ -677,6 +742,7 @@ Item {
         property string stepId: ""
         property string stepName: ""
         property real   stepDue: 0
+        property string stepDueNote: ""
         // Champs invisibles à l'écran mais répliqués : conservés tels quels au
         // renommage, pour ne pas écraser une modification distante concurrente.
         property string stepQty: ""
@@ -688,15 +754,16 @@ Item {
             onTriggered: stepEditDialog.openFor(stepMenu.stepId, stepMenu.stepName)
         }
         MenuItem {
-            text: stepMenu.stepDue > 0 ? "Modifier l'échéance" : "Ajouter une échéance"
+            text: (stepMenu.stepDue > 0 || stepMenu.stepDueNote.length > 0)
+                  ? "Modifier l'échéance" : "Ajouter une échéance"
             onTriggered: {
                 dueDialog.targetStep = stepMenu.stepId
-                dueDialog.openFor(stepMenu.stepDue)
+                dueDialog.openFor(stepMenu.stepDue, stepMenu.stepDueNote)
             }
         }
         MenuItem {
             text: "Ajouter à l'agenda"
-            enabled: stepMenu.stepDue > 0
+            enabled: stepMenu.stepDue > 0 && stepMenu.stepDueNote.length === 0
             onTriggered: AppController.addToCalendar(
                              stepMenu.stepName + " — " + root.pageTitle, "",
                              stepMenu.stepDue)
@@ -709,15 +776,23 @@ Item {
     }
 
     // Un seul dialogue d'échéance pour la tâche ET ses étapes : `targetStep` dit
-    // à qui la date choisie s'applique ("" = la tâche).
+    // à qui la date/texte choisi s'applique ("" = la tâche).
     DueDialog {
         id: dueDialog
         property string targetStep: ""
-        onPicked: function (ms) {
-            if (targetStep.length > 0)
-                AppController.steps.setDue(targetStep, ms)
-            else
-                AppController.items.setDue(root.itemId, ms)
+        onPicked: function (ms, note) {
+            const model = targetStep.length > 0 ? AppController.steps
+                                                : AppController.items
+            const id = targetStep.length > 0 ? targetStep : root.itemId
+            if (note && note.length > 0) {
+                model.setDueNote(id, note)
+            } else if (ms > 0) {
+                model.setDue(id, ms)
+            } else {
+                // Tout retirer : date et texte.
+                model.setDueNote(id, "")
+                model.setDue(id, 0)
+            }
         }
     }
 

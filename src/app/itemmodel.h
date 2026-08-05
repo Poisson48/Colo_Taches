@@ -12,7 +12,8 @@ namespace app {
 
 // ItemModel: QAbstractListModel for the tasks of a single list — or, en mode
 // étapes (parentId non vide), pour les étapes d'une seule tâche.
-// Sorting (§7 SPEC): unchecked first, then by created ascending.
+// Tri : catégorie (sauf mode manuel / étapes), puis position manuelle.
+// L'état `done` n'entre pas dans le tri — cocher ne déplace jamais les lignes.
 // Deleted items (del=true) are hidden (tombstone filter).
 class ItemModel : public QAbstractListModel {
     Q_OBJECT
@@ -57,6 +58,8 @@ public:
         StepsDoneRole,
         // Échéance (ms epoch, 0 = pas d'échéance). Facultative, étapes comprises.
         DueRole,
+        // Échéance libre (« avant que ça ne pue »), alternative à `due`.
+        DueNoteRole,
         // Cette ligne est une étape dépliée sous sa tâche (mode « Au boulot »).
         IsStepRole,
     };
@@ -132,7 +135,10 @@ public slots:
                   const QString &qty, const QString &note, const QString &aisle);
 
     // Échéance (LWW) : ms epoch du jour visé, 0 = la retirer. Tâches et étapes.
+    // Poser une date (>0) efface aussi dueNote (les deux s'excluent).
     void setDue(const QString &itemId, double dueMs);
+    // Échéance libre (LWW). Non vide → efface aussi la date (`due` = 0).
+    void setDueNote(const QString &itemId, const QString &note);
 
     // Photos de la tâche : le champ LWW `image` porte la liste des shas (séparés
     // par des espaces), dans l'ordre d'ajout — « avant » puis « après ». Les blobs
@@ -174,11 +180,12 @@ private:
     // Find visible row index by itemId (-1 if not found).
     int findRow(const QString &itemId) const;
 
-    // Tri d'affichage. En mode catégorie : catégorie, puis à faire avant fait, puis
-    // position manuelle — une tâche cochée descend au bas de SA catégorie. En mode
-    // manuel : la catégorie est ignorée, tri par à-faire/fait puis position manuelle.
-    // En mode étapes : position manuelle seule — une étape cochée garde sa place,
-    // la séquence des étapes reste lisible.
+    // Tri d'affichage.
+    // - En mode catégorie : catégorie, puis position manuelle.
+    // - En mode manuel : la catégorie est ignorée, tri par position manuelle.
+    // - En mode étapes : position manuelle seule.
+    // Le statut `done` n'entre PAS dans le tri : cocher/décocher ne déplace jamais
+    // les lignes (la ligne change d'apparence, pas de place).
     static bool rowLessThan(const Row &a, const Row &b, bool manual, bool steps);
 
     // Rang du rayon dans le parcours. Rayon inconnu ou vide → après tous les autres.
@@ -190,9 +197,9 @@ private:
     bool matchesFilter(const core::Item &item) const;
 
     // Ré-espace les positions d'un groupe quand l'intervalle entre deux voisins est
-    // épuisé. Le groupe = même état (pris / à acheter) et, en mode rayon, même rayon ;
-    // en mode manuel, tous rayons confondus.
-    void renumber(const std::string &aisle, bool done);
+    // épuisé. Le groupe = même rayon (en mode rayon) ; en mode manuel, tous rayons
+    // confondus. Le statut `done` n'entre pas dans la définition du groupe.
+    void renumber(const std::string &aisle);
 
     // Tombstone d'une tâche + cascade sur ses étapes (une étape sans tâche n'a plus
     // de sens, et resurgirait au merge si on ne la supprimait que localement).

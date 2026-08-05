@@ -158,6 +158,8 @@ public slots:
     bool setTaskImage(const QString &itemId, const QUrl &fileUrl);
     // Retire UNE photo de la tâche (les autres restent).
     void removeTaskImage(const QString &itemId, const QString &sha);
+    // Chemin temporaire pour une capture caméra (fichier local, prêt pour setTaskImage).
+    Q_INVOKABLE QString tempPhotoPath() const;
 
     // --- Échéance / agenda ---
     // Propose l'événement à l'agenda : Android ouvre l'app d'agenda pré-remplie

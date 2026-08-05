@@ -38,7 +38,7 @@ void initNotifications()
         "(Landroid/content/Context;)V", ctx.object());
 }
 
-bool platformNotify(const QString& title, const QString& body)
+bool platformNotify(const QString& title, const QString& body, qint64 whenMs)
 {
     const QJniObject ctx = androidContext();
     if (!ctx.isValid())
@@ -49,8 +49,9 @@ bool platformNotify(const QString& title, const QString& body)
 
     QJniObject::callStaticMethod<void>(
         kPlatformClass, "showNotification",
-        "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)V",
-        ctx.object(), jTitle.object<jstring>(), jBody.object<jstring>());
+        "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;J)V",
+        ctx.object(), jTitle.object<jstring>(), jBody.object<jstring>(),
+        static_cast<jlong>(whenMs));
 
     return true;
 }
@@ -123,7 +124,7 @@ bool platformAddCalendarEvent(const QString& title, const QString& description,
 
 void initNotifications() {}
 
-bool platformNotify(const QString&, const QString&) { return false; }
+bool platformNotify(const QString&, const QString&, qint64) { return false; }
 
 bool platformShare(const QString&) { return false; }
 

@@ -139,7 +139,7 @@ set(COLO_QML_FILES
     qml/FilePickers.qml
 )
 if(COLO_HAS_CAMERA)
-    list(APPEND COLO_QML_FILES qml/ScanPage.qml)
+    list(APPEND COLO_QML_FILES qml/ScanPage.qml qml/PhotoCapture.qml)
 endif()
 
 qt_add_qml_module(colotaches

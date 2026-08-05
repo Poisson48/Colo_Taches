@@ -137,7 +137,8 @@ private:
     void resetDeltaCounter(const std::string& listId);
 
     // Show a system notification (tray if available, otherwise qDebug).
-    void showNotification(const QString& title, const QString& body);
+    // whenMs > 0 → horodatage = heure de la modification (pas de la réception).
+    void showNotification(const QString& title, const QString& body, qint64 whenMs = 0);
 
     store::Database* m_db     = nullptr;
     net::RelayPool*  m_pool   = nullptr;

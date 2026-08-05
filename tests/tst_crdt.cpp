@@ -691,16 +691,31 @@ static void test_MergeImageAndParent() {
     EXPECT_FALSE(mergeItem(local, staleDue));
     EXPECT_EQ(local.due, 1721000000000LL);
 
+    // dueNote : même LWW ; un pair qui ignore le champ (version {0,""}) ne l'efface pas.
+    Item withNote = local;
+    withNote.dueNote    = "avant que ça ne pue";
+    withNote.dueNoteVer = makeVer(10, "devB");
+    EXPECT_TRUE(mergeItem(local, withNote));
+    EXPECT_EQ(local.dueNote, "avant que ça ne pue");
+    Item staleNote = local;
+    staleNote.dueNote    = "trop vieux";
+    staleNote.dueNoteVer = makeVer(2, "devC");
+    EXPECT_FALSE(mergeItem(local, staleNote));
+    EXPECT_EQ(local.dueNote, "avant que ça ne pue");
+
     // Un pair qui ignore le champ (version {0,""}) ne peut rien effacer.
     Item legacy = local;
     legacy.image    = "";
     legacy.imageVer = makeVer(0, "");
     legacy.due      = 0;
     legacy.dueVer   = makeVer(0, "");
+    legacy.dueNote    = "";
+    legacy.dueNoteVer = makeVer(0, "");
     legacy.parentId = "";   // et un parentId divergent n'est jamais adopté
     EXPECT_FALSE(mergeItem(local, legacy));
     EXPECT_EQ(local.parentId, "task-1");
     EXPECT_EQ(local.due, 1721000000000LL);
+    EXPECT_EQ(local.dueNote, "avant que ça ne pue");
 
     // Un item inconnu est inséré tel quel, parentId compris.
     std::map<std::string, Item> map;

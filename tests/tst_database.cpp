@@ -661,6 +661,8 @@ private slots:
         task.imageVer = {3, "dev-A"};
         task.due      = 1722000000000LL;
         task.dueVer   = {4, "dev-A"};
+        task.dueNote    = "avant que ça ne pue";
+        task.dueNoteVer = {5, "dev-A"};
         QVERIFY(db.upsertItem(task));
 
         core::Item step = makeItem("list-A", "step-1", "Poncer");
@@ -675,9 +677,12 @@ private slots:
                 QCOMPARE(it.imageVer.lamport, int64_t(3));
                 QCOMPARE(it.due, int64_t(1722000000000LL));
                 QCOMPARE(it.dueVer.lamport, int64_t(4));
+                QCOMPARE(it.dueNote, std::string("avant que ça ne pue"));
+                QCOMPARE(it.dueNoteVer.lamport, int64_t(5));
                 QCOMPARE(it.parentId, std::string(""));
             } else {
                 QCOMPARE(it.parentId, std::string("task-1"));
+                QCOMPARE(it.dueNote, std::string(""));
             }
         }
 

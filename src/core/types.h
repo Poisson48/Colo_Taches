@@ -66,6 +66,12 @@ struct Item {
     int64_t due = 0;
     Ver     dueVer;
 
+    // Échéance libre (« avant que ça ne pue ») : alternative à `due`. Date et texte
+    // s'excluent côté écriture locale (poser l'un vide l'autre) ; au merge chacun
+    // reste LWW indépendant — l'UI privilégie l'affichage de dueNote s'il est non vide.
+    std::string dueNote;
+    Ver         dueNoteVer;
+
     bool done = false;
     Ver  doneVer;
     // Date de cochage (ms epoch, 0 si à acheter). Satellite de `done` : pas de version
