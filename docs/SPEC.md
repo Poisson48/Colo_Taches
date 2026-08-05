@@ -46,10 +46,11 @@ Chaque champ porte sa propre version :
 | `done` | bool | coché = fait |
 | `del` | bool | tombstone (supprimé) |
 
-Métadonnée immuable supplémentaire : `parent` (itemId de la tâche parente, "" = tâche
-de premier niveau). Fixé à la création comme `created`/`by`, jamais versionné ni mergé :
-une étape ne change jamais de tâche. Supprimer une tâche pose aussi le tombstone de
-chacune de ses étapes (cascade côté client, répliquée comme n'importe quel `del`).
+Métadonnée immuable supplémentaire : `parent` (itemId du parent, "" = tâche
+de premier niveau). Fixé à la création comme `created`/`by`, jamais versionné ni
+mergé. Une étape peut elle-même avoir des sous-étapes (arbre de profondeur
+quelconque). Supprimer un nœud pose aussi le tombstone de tous ses descendants
+(cascade côté client, répliquée comme n'importe quel `del`).
 
 Les blobs des photos ne circulent PAS dans les deltas : chacun voyage dans un
 événement `img` dédié (§4), adressé par contenu (un sha de la liste du champ `image`).
