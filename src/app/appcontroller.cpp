@@ -19,6 +19,7 @@
 #include <optional>
 #include <algorithm>
 #include <map>
+#include <set>
 #include <limits>
 
 #include "../core/types.h"
@@ -510,17 +511,24 @@ void AppController::duplicateList(const QString &listId, const QString &title) {
     if (!m_db.createList(copy)) return;
 
     // Les tâches sont recopiées « à faire » (done=false) : on duplique une liste pour
-    // la refaire. Les tombstones de l'originale ne sont pas repris. Deux passes :
-    // d'abord les tâches (pour connaître leurs nouveaux ids), puis leurs étapes.
+    // la refaire. Les tombstones de l'originale ne sont pas repris. Multi-passe :
+    // un item n'est copié que lorsque son parent (s'il en a un) l'est déjà.
     int copied = 0;
     std::map<std::string, std::string> idMap;   // itemId source → itemId copie
     const auto srcItems = m_db.getItems(srcOpt->listId);
-    for (const bool stepsPass : { false, true }) {
-        for (const auto &src : srcItems) {
-            if (src.del) continue;
-            if (src.parentId.empty() == stepsPass) continue;
-            // Étape dont la tâche a disparu : rien à quoi la rattacher.
-            if (stepsPass && !idMap.count(src.parentId)) continue;
+    std::vector<const core::Item *> pending;
+    for (const auto &src : srcItems) {
+        if (!src.del) pending.push_back(&src);
+    }
+    while (!pending.empty()) {
+        std::vector<const core::Item *> deferred;
+        bool progress = false;
+        for (const core::Item *psrc : pending) {
+            const auto &src = *psrc;
+            if (!src.parentId.empty() && !idMap.count(src.parentId)) {
+                deferred.push_back(psrc);
+                continue;
+            }
 
             const int64_t lamport = m_db.bumpLamport(copy.listId);
             const core::Ver ver{ lamport, m_deviceId.toStdString() };
@@ -532,7 +540,7 @@ void AppController::duplicateList(const QString &listId, const QString &title) {
             item.itemId  = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
             item.created = copy.created + copied; // conserve l'ordre d'affichage de la source
             item.by      = m_deviceId.toStdString();
-            item.parentId = stepsPass ? idMap[src.parentId] : std::string();
+            item.parentId = src.parentId.empty() ? std::string() : idMap[src.parentId];
             item.name    = src.name;
             item.nameVer = ver;
             item.qty     = src.qty;
@@ -558,8 +566,11 @@ void AppController::duplicateList(const QString &listId, const QString &title) {
             if (m_db.upsertItem(item)) {
                 idMap[src.itemId] = item.itemId;
                 ++copied;
+                progress = true;
             }
         }
+        if (!progress) break;  // orphelins (parent tombstoné) : on les laisse
+        pending = std::move(deferred);
     }
 
     m_listsModel->reload(m_db, m_deviceId.toStdString());
@@ -592,12 +603,20 @@ void AppController::importListInto(const QString &destListId, const QString &sou
     int copied = 0;
     std::map<std::string, std::string> idMap;   // itemId source → itemId copie
     const auto srcItems = m_db.getItems(srcOpt->listId);
-    // Deux passes, comme la duplication : les tâches d'abord, leurs étapes ensuite.
-    for (const bool stepsPass : { false, true }) {
-        for (const auto &src : srcItems) {
-            if (src.del) continue;  // les tombstones de la source ne sont pas repris
-            if (src.parentId.empty() == stepsPass) continue;
-            if (stepsPass && !idMap.count(src.parentId)) continue;
+    // Multi-passe : parent avant enfant (sous-étapes imbriquées comprises).
+    std::vector<const core::Item *> pending;
+    for (const auto &src : srcItems) {
+        if (!src.del) pending.push_back(&src);  // les tombstones de la source ne sont pas repris
+    }
+    while (!pending.empty()) {
+        std::vector<const core::Item *> deferred;
+        bool progress = false;
+        for (const core::Item *psrc : pending) {
+            const auto &src = *psrc;
+            if (!src.parentId.empty() && !idMap.count(src.parentId)) {
+                deferred.push_back(psrc);
+                continue;
+            }
 
             const int64_t lamport = m_db.bumpLamport(destOpt->listId);
             const core::Ver ver{ lamport, m_deviceId.toStdString() };
@@ -609,7 +628,7 @@ void AppController::importListInto(const QString &destListId, const QString &sou
             item.itemId  = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
             item.created = now + copied;   // préserve l'ordre relatif des tâches importées
             item.by      = m_deviceId.toStdString();
-            item.parentId = stepsPass ? idMap[src.parentId] : std::string();
+            item.parentId = src.parentId.empty() ? std::string() : idMap[src.parentId];
             item.name    = src.name;
             item.nameVer = ver;
             item.qty     = src.qty;
@@ -634,8 +653,11 @@ void AppController::importListInto(const QString &destListId, const QString &sou
             if (m_db.upsertItem(item)) {
                 idMap[src.itemId] = item.itemId;
                 ++copied;
+                progress = true;
             }
         }
+        if (!progress) break;
+        pending = std::move(deferred);
     }
 
     // Si la destination est la liste actuellement ouverte, rafraîchir son écran.
@@ -713,25 +735,30 @@ QString AppController::listCsv(const QString &listId) {
     rows.push_back(kCsvHeader);
     const auto items = m_db.getItems(listId.toStdString());
 
-    // Nom de la tâche parente par itemId, pour la colonne « Etape de ».
-    std::map<std::string, std::string> taskNames;
+    // Nom de chaque item (tâches et étapes) pour la colonne « Etape de ».
+    std::map<std::string, std::string> namesById;
     for (const auto &it : items)
-        if (!it.del && it.parentId.empty())
-            taskNames[it.itemId] = it.name;
+        if (!it.del) namesById[it.itemId] = it.name;
 
-    // Les tâches d'abord, leurs étapes ensuite : l'import (une passe) retrouve
-    // toujours la tâche avant ses étapes.
-    for (const bool stepsPass : { false, true }) {
+    // Parent avant enfant (multi-passe) : l'import retrouve toujours le parent.
+    std::set<std::string> written;
+    bool progress = true;
+    while (progress) {
+        progress = false;
         for (const auto &it : items) {
-            if (it.del || (it.parentId.empty() == stepsPass)) continue;
+            if (it.del || written.count(it.itemId)) continue;
+            if (!it.parentId.empty() && !written.count(it.parentId)) continue;
+
             std::string parentName;
-            if (stepsPass) {
-                const auto pit = taskNames.find(it.parentId);
-                if (pit == taskNames.end()) continue;   // tâche disparue : étape orpheline
+            if (!it.parentId.empty()) {
+                const auto pit = namesById.find(it.parentId);
+                if (pit == namesById.end()) continue;  // parent disparu : orphelin
                 parentName = pit->second;
             }
             rows.push_back({ it.name, it.qty, it.note, it.aisle,
                              it.done ? "oui" : "", parentName });
+            written.insert(it.itemId);
+            progress = true;
         }
     }
     return QString::fromStdString(core::csvWrite(rows));
@@ -828,49 +855,100 @@ int AppController::importRowsAsList(const QString &title,
         return 0;
 
     int added = 0;
-    // Tâches créées par nom (dernière gagnante en cas d'homonymes), pour rattacher
-    // les lignes « Etape de » — l'export écrit toujours la tâche avant ses étapes.
-    std::map<std::string, std::string> taskIdsByName;
-    for (const auto &row : rows) {
+    // Items créés par nom (dernière gagnante en cas d'homonymes), pour rattacher
+    // les lignes « Etape de » — y compris sous-étapes imbriquées.
+    std::map<std::string, std::string> idsByName;
+
+    struct PendingRow {
+        size_t index = 0;
+        std::string name;
+        std::string parentName;
+        const std::vector<std::string> *row = nullptr;
+    };
+    std::vector<PendingRow> pending;
+    for (size_t i = 0; i < rows.size(); ++i) {
+        const auto &row = rows[i];
         if (looksLikeHeader(row)) continue;
         if (row.empty()) continue;
         const std::string name = QString::fromStdString(row[0]).trimmed().toStdString();
         if (name.empty()) continue;
-
-        const int64_t lamport = m_db.bumpLamport(meta.listId);
-        const core::Ver ver{ lamport, m_deviceId.toStdString() };
-
         const std::string parentName = row.size() > 5
             ? QString::fromStdString(row[5]).trimmed().toStdString() : std::string();
-        std::string parentId;
-        if (!parentName.empty()) {
-            const auto pit = taskIdsByName.find(parentName);
-            if (pit != taskIdsByName.end()) parentId = pit->second;
-            // Tâche parente inconnue : la ligne devient une tâche de premier niveau
-            // plutôt que d'être perdue.
-        }
+        pending.push_back({ i, name, parentName, &row });
+    }
 
-        core::Item item;
-        item.listId  = meta.listId;
-        item.itemId  = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
-        item.created = meta.created + added;
-        item.by      = m_deviceId.toStdString();
-        item.parentId = parentId;
-        item.name    = name;                                     item.nameVer  = ver;
-        item.qty     = row.size() > 1 ? row[1] : std::string();  item.qtyVer   = ver;
-        item.note    = row.size() > 2 ? row[2] : std::string();  item.noteVer  = ver;
-        item.aisle   = row.size() > 3 ? row[3] : std::string();  item.aisleVer = ver;
-        item.order   = item.created;                             item.orderVer = ver;
-        item.done    = row.size() > 4 && truthy(row[4]);         item.doneVer  = ver;
-        item.doneAt  = item.done ? meta.created : 0;
-        item.delVer  = ver;
-        item.touched = meta.created;
+    // Tant que le parent est connu (ou vide), on importe ; sinon on attend.
+    while (!pending.empty()) {
+        std::vector<PendingRow> deferred;
+        bool progress = false;
+        for (const auto &pr : pending) {
+            std::string parentId;
+            if (!pr.parentName.empty()) {
+                const auto pit = idsByName.find(pr.parentName);
+                if (pit == idsByName.end()) {
+                    deferred.push_back(pr);
+                    continue;
+                }
+                parentId = pit->second;
+            }
 
-        if (m_db.upsertItem(item)) {
-            if (parentId.empty())
-                taskIdsByName[name] = item.itemId;
-            ++added;
+            const int64_t lamport = m_db.bumpLamport(meta.listId);
+            const core::Ver ver{ lamport, m_deviceId.toStdString() };
+            const auto &row = *pr.row;
+
+            core::Item item;
+            item.listId   = meta.listId;
+            item.itemId   = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+            item.created  = meta.created + added;
+            item.by       = m_deviceId.toStdString();
+            item.parentId = parentId;
+            item.name     = pr.name;                                    item.nameVer  = ver;
+            item.qty      = row.size() > 1 ? row[1] : std::string();    item.qtyVer   = ver;
+            item.note     = row.size() > 2 ? row[2] : std::string();    item.noteVer  = ver;
+            item.aisle    = row.size() > 3 ? row[3] : std::string();    item.aisleVer = ver;
+            item.order    = item.created;                               item.orderVer = ver;
+            item.done     = row.size() > 4 && truthy(row[4]);           item.doneVer  = ver;
+            item.doneAt   = item.done ? meta.created : 0;
+            item.delVer   = ver;
+            item.touched  = meta.created;
+
+            if (m_db.upsertItem(item)) {
+                idsByName[pr.name] = item.itemId;
+                ++added;
+                progress = true;
+            }
         }
+        if (!progress) {
+            // Parents introuvables : importer le reste en tâches de premier niveau
+            // plutôt que de les perdre (comportement historique).
+            for (const auto &pr : deferred) {
+                const int64_t lamport = m_db.bumpLamport(meta.listId);
+                const core::Ver ver{ lamport, m_deviceId.toStdString() };
+                const auto &row = *pr.row;
+
+                core::Item item;
+                item.listId  = meta.listId;
+                item.itemId  = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+                item.created = meta.created + added;
+                item.by      = m_deviceId.toStdString();
+                item.name    = pr.name;                                    item.nameVer  = ver;
+                item.qty     = row.size() > 1 ? row[1] : std::string();    item.qtyVer   = ver;
+                item.note    = row.size() > 2 ? row[2] : std::string();    item.noteVer  = ver;
+                item.aisle   = row.size() > 3 ? row[3] : std::string();    item.aisleVer = ver;
+                item.order   = item.created;                               item.orderVer = ver;
+                item.done    = row.size() > 4 && truthy(row[4]);           item.doneVer  = ver;
+                item.doneAt  = item.done ? meta.created : 0;
+                item.delVer  = ver;
+                item.touched = meta.created;
+
+                if (m_db.upsertItem(item)) {
+                    idsByName[pr.name] = item.itemId;
+                    ++added;
+                }
+            }
+            break;
+        }
+        pending = std::move(deferred);
     }
 
     m_syncEngine.onListJoined(meta.listId);

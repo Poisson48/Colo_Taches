@@ -184,9 +184,7 @@ void ItemModel::setFilter(const QString &filter) {
 
 void ItemModel::rebuildStepCounts() {
     m_stepCounts.clear();
-    if (stepsMode())
-        return;
-    // m_items contient tout (tâches ET étapes) : la progression se lit d'une passe.
+    // Enfants directs seulement : chaque nœud affiche sa propre progression (n/m).
     for (const auto &item : m_items) {
         if (item.del || item.parentId.empty())
             continue;
@@ -196,46 +194,77 @@ void ItemModel::rebuildStepCounts() {
     }
 }
 
+std::vector<std::string> ItemModel::descendantIds(const std::string &rootId) const {
+    std::vector<std::string> out;
+    std::vector<std::string> frontier{ rootId };
+    while (!frontier.empty()) {
+        const std::string parent = frontier.back();
+        frontier.pop_back();
+        for (const auto &item : m_items) {
+            if (item.del || item.parentId != parent)
+                continue;
+            out.push_back(item.itemId);
+            frontier.push_back(item.itemId);
+        }
+    }
+    return out;
+}
+
+void ItemModel::appendTree(std::vector<Row> &out, const std::string &parentId,
+                           int depth, bool asSteps, const std::string &sectionAisle) {
+    std::vector<Row> kids;
+    for (const auto &item : m_items) {
+        if (item.del || item.parentId != parentId)
+            continue;
+        // En mode étapes (asSteps=false) le filtre s'applique à chaque nœud ; en
+        // « Au boulot » les descendants suivent leur tâche déjà filtrée.
+        if (!asSteps && !matchesFilter(item))
+            continue;
+        Row r{ item, asSteps, sectionAisle, depth };
+        kids.push_back(std::move(r));
+    }
+    std::stable_sort(kids.begin(), kids.end(), [](const Row &a, const Row &b) {
+        if (a.item.order != b.item.order) return a.item.order < b.item.order;
+        return a.item.itemId < b.item.itemId;
+    });
+    for (auto &k : kids) {
+        const std::string id = k.item.itemId;
+        out.push_back(std::move(k));
+        appendTree(out, id, depth + 1, asSteps, sectionAisle);
+    }
+}
+
 void ItemModel::rebuildRows() {
     beginResetModel();
     m_rows.clear();
 
-    std::vector<Row> tasks;
-    for (const auto &item : m_items) {
-        // La vue ne montre qu'un niveau : les tâches (parent vide), ou les étapes de
-        // la tâche ouverte. m_items garde tout, y compris pour la progression.
-        if (!item.del && item.parentId == m_parentId && matchesFilter(item)) {
-            tasks.push_back(Row{ item });
-        }
-    }
-    const bool manual = m_manualSort, steps = stepsMode();
-    std::stable_sort(tasks.begin(), tasks.end(),
-                     [=](const Row &a, const Row &b){ return rowLessThan(a, b, manual, steps); });
-
-    if (m_showSteps && !stepsMode()) {
-        // Mode « Au boulot » : chaque tâche est suivie de ses étapes, dans leur
-        // ordre manuel, cochables en place. Une étape porte le rayon de section de
-        // sa tâche pour rester dans la même section à l'écran.
-        for (auto &t : tasks) {
-            t.sectionAisle = t.item.aisle;
-            const std::string taskId = t.item.itemId;
-            const std::string aisle  = t.item.aisle;
-            m_rows.push_back(std::move(t));
-
-            std::vector<Row> kids;
-            for (const auto &item : m_items) {
-                if (!item.del && item.parentId == taskId)
-                    kids.push_back(Row{ item, true, aisle });
-            }
-            std::stable_sort(kids.begin(), kids.end(), [](const Row &a, const Row &b) {
-                if (a.item.order != b.item.order) return a.item.order < b.item.order;
-                return a.item.itemId < b.item.itemId;
-            });
-            for (auto &k : kids)
-                m_rows.push_back(std::move(k));
-        }
+    if (stepsMode()) {
+        // Sous-arbre complet sous la tâche (ou étape) ouverte, aplati.
+        appendTree(m_rows, m_parentId, 0, false, {});
     } else {
-        m_rows = std::move(tasks);
+        std::vector<Row> tasks;
+        for (const auto &item : m_items) {
+            if (!item.del && item.parentId.empty() && matchesFilter(item))
+                tasks.push_back(Row{ item, false, {}, 0 });
+        }
+        const bool manual = m_manualSort;
+        std::stable_sort(tasks.begin(), tasks.end(),
+                         [=](const Row &a, const Row &b){
+                             return rowLessThan(a, b, manual, false);
+                         });
+
+        if (m_showSteps) {
+            // Mode « Au boulot » : chaque tâche est suivie de tout son sous-arbre.
+            for (auto &t : tasks) {
+                t.sectionAisle = t.item.aisle;
+                const std::string taskId = t.item.itemId;
+                const std::string aisle  = t.item.aisle;
+                m_rows.push_back(std::move(t));
+                appendTree(m_rows, taskId, 0, true, aisle);
+            }
+        } else {
+            m_rows = std::move(tasks);
+        }
     }
 
     rebuildStepCounts();
@@ -280,6 +309,7 @@ QVariant ItemModel::data(const QModelIndex &index, int role) const {
     case DueRole:     return static_cast<qlonglong>(row.item.due);
     case DueNoteRole: return QString::fromStdString(row.item.dueNote);
     case IsStepRole:  return row.isStep;
+    case DepthRole:   return row.depth;
     case StepsTotalRole: {
         const auto it = m_stepCounts.find(row.item.itemId);
         return it != m_stepCounts.end() ? it->second.first : 0;
@@ -319,6 +349,7 @@ QHash<int, QByteArray> ItemModel::roleNames() const {
         { DueRole,     "due"     },
         { DueNoteRole, "dueNote" },
         { IsStepRole,  "isStep"  },
+        { DepthRole,   "depth"   },
     };
 }
 
@@ -462,6 +493,13 @@ void ItemModel::addItem(const QString &name, const QString &qty,
         return;
     }
 
+    // En mode étapes l'arbre est aplati : un insert par ordre global se tromperait
+    // dès qu'il y a des sous-étapes. Reconstruire place le frère au bon endroit.
+    if (stepsMode()) {
+        rebuildRows();
+        return;
+    }
+
     // Find sorted insertion position (upper_bound to append after equals).
     Row newRow{ item };
     const bool manual = m_manualSort, steps = stepsMode();
@@ -477,6 +515,55 @@ void ItemModel::addItem(const QString &name, const QString &qty,
     emit refreshed();
 }
 
+void ItemModel::addChild(const QString &parentId, const QString &name) {
+    if (!m_db) return;
+
+    const std::string pid = parentId.toStdString();
+    auto pit = std::find_if(m_items.begin(), m_items.end(),
+                            [&](const core::Item &i){ return i.itemId == pid; });
+    if (pit == m_items.end() || pit->del) return;
+
+    const QString trimmed = name.trimmed();
+    if (trimmed.isEmpty()) return;
+
+    const int64_t lamport = m_db->bumpLamport(m_listId);
+    const core::Ver ver{ lamport, m_deviceId };
+    const int64_t ts = nextCreated();
+
+    core::Item item;
+    item.listId   = m_listId;
+    item.itemId   = QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString();
+    item.created  = ts;
+    item.by       = m_deviceId;
+    item.parentId = pid;
+    item.name     = trimmed.toStdString();
+    item.nameVer  = ver;
+    item.qtyVer   = ver;
+    item.noteVer  = ver;
+    item.aisleVer = ver;
+    item.order    = ts;
+    item.orderVer = ver;
+    item.done     = false;
+    item.doneVer  = ver;
+    item.doneAt   = 0;
+    item.del      = false;
+    item.delVer   = ver;
+    item.touched  = ts;
+
+    if (!m_db->upsertItem(item)) return;
+
+    // Pas de favoris : comme les étapes (stepsMode), propre à leur parent.
+    m_items.push_back(item);
+
+    emit localChanged(m_listId);
+    emit aisleNamesChanged();
+    emit itemAdded();
+
+    // Insertion dans un arbre aplati : reconstruire est plus simple qu'un insert
+    // ordonné au bon endroit sous le parent.
+    rebuildRows();
+}
+
 void ItemModel::toggleDone(const QString &itemId) {
     if (!m_db) return;
 
@@ -485,83 +572,97 @@ void ItemModel::toggleDone(const QString &itemId) {
     // Find in authoritative set.
     auto it = std::find_if(m_items.begin(), m_items.end(),
                            [&](const core::Item &i){ return i.itemId == id; });
-    if (it == m_items.end()) return;
+    if (it == m_items.end() || it->del) return;
 
     const int64_t lamport = m_db->bumpLamport(m_listId);
     const core::Ver ver{ lamport, m_deviceId };
     const int64_t now = QDateTime::currentMSecsSinceEpoch();
 
     const bool newDone = !it->done;
+    const std::string toggledParent = it->parentId;
+
+    // 1. Poser l'état sur X.
     it->done    = newDone;
     it->doneVer = ver;
-    it->doneAt  = newDone ? now : 0;  // décoché → plus de date de cochage
+    it->doneAt  = newDone ? now : 0;
     it->touched = now;
 
     if (!m_db->upsertItem(*it)) return;
 
-    // Lignes dont l'apparence peut changer (sans changer de place).
     std::vector<std::string> dirtyIds{ id };
-    // Tâche dont la progression d'étapes doit être rafraîchie à l'écran.
-    std::string stepsTaskId;
 
-    // Historique : chaque tâche (pas les étapes) cochée ici laisse une trace locale
-    // durable — elle survivra à « Retirer les tâches faites ». « vous » : c'est ce
-    // que l'UI affiche pour soi-même partout ailleurs.
-    if (newDone && it->parentId.empty()) {
+    // Historique : uniquement une tâche de premier niveau qui passe à faite.
+    if (newDone && toggledParent.empty()) {
         m_db->appendHistory(m_listId,
                             { it->itemId, it->name, it->aisle, now, "vous" });
     }
 
-    if (it->parentId.empty()) {
-        // Cocher (ou décocher) une tâche emporte ses étapes : l'état de la tâche
-        // EST celui de l'ensemble — une tâche « faite » aux étapes ouvertes ne
-        // voudrait rien dire.
-        stepsTaskId = id;
-        for (auto &s : m_items) {
-            if (s.del || s.parentId != id || s.done == newDone) continue;
-            s.done    = newDone;
-            s.doneVer = ver;
-            s.doneAt  = newDone ? now : 0;
-            s.touched = now;
-            m_db->upsertItem(s);
-            dirtyIds.push_back(s.itemId);
-        }
-    } else {
-        // Dernière étape cochée → la tâche se coche toute seule ; une étape
-        // rouverte rouvre la tâche. La tâche reflète toujours ses étapes.
-        stepsTaskId = it->parentId;
+    // 2. Tous les descendants prennent le même état.
+    for (const auto &did : descendantIds(id)) {
+        auto s = std::find_if(m_items.begin(), m_items.end(),
+                              [&](const core::Item &i){ return i.itemId == did; });
+        if (s == m_items.end() || s->del || s->done == newDone) continue;
+        s->done    = newDone;
+        s->doneVer = ver;
+        s->doneAt  = newDone ? now : 0;
+        s->touched = now;
+        m_db->upsertItem(*s);
+        dirtyIds.push_back(did);
+    }
+
+    // 3. Remonter : un parent est fait ssi il a des enfants et qu'ils le sont tous.
+    std::string walk = toggledParent;
+    while (!walk.empty()) {
         auto p = std::find_if(m_items.begin(), m_items.end(),
-                              [&](const core::Item &i){ return i.itemId == it->parentId; });
-        if (p != m_items.end() && !p->del) {
-            bool any = false, all = true;
-            for (const auto &s : m_items) {
-                if (s.del || s.parentId != p->itemId) continue;
-                any = true;
-                if (!s.done) { all = false; break; }
-            }
-            const bool target = any && all;
-            if (any && p->done != target) {
-                p->done    = target;
-                p->doneVer = ver;
-                p->doneAt  = target ? now : 0;
-                p->touched = now;
-                m_db->upsertItem(*p);
-                dirtyIds.push_back(p->itemId);
-                if (target && p->parentId.empty())
-                    m_db->appendHistory(m_listId,
-                                        { p->itemId, p->name, p->aisle, now, "vous" });
-            }
+                              [&](const core::Item &i){ return i.itemId == walk; });
+        if (p == m_items.end() || p->del) break;
+
+        bool any = false, all = true;
+        for (const auto &s : m_items) {
+            if (s.del || s.parentId != p->itemId) continue;
+            any = true;
+            if (!s.done) { all = false; break; }
         }
+        const bool target = any && all;
+        if (!any || p->done == target)
+            break;
+
+        p->done    = target;
+        p->doneVer = ver;
+        p->doneAt  = target ? now : 0;
+        p->touched = now;
+        m_db->upsertItem(*p);
+        dirtyIds.push_back(p->itemId);
+
+        if (target && p->parentId.empty())
+            m_db->appendHistory(m_listId,
+                                { p->itemId, p->name, p->aisle, now, "vous" });
+
+        walk = p->parentId;
     }
 
     emit localChanged(m_listId);
     emit aisleNamesChanged();
 
     // Cocher ne déplace pas la ligne : l'état fait/à faire ne fait pas partie du
-    // tri (rowLessThan). La ligne change d'apparence, pas de place — même quand
-    // la cascade touche aussi les étapes ou la tâche parente.
+    // tri (rowLessThan). La ligne change d'apparence, pas de place.
     rebuildStepCounts();
-    bool stepsRolesEmitted = false;
+
+    // Progression : le nœud basculé et tous ses ancêtres qui ont des enfants.
+    std::set<std::string> stepsRoleIds;
+    {
+        std::string anc = id;
+        for (;;) {
+            if (m_stepCounts.count(anc))
+                stepsRoleIds.insert(anc);
+            auto a = std::find_if(m_items.begin(), m_items.end(),
+                                  [&](const core::Item &i){ return i.itemId == anc; });
+            if (a == m_items.end() || a->parentId.empty()) break;
+            anc = a->parentId;
+        }
+    }
+
+    std::set<std::string> emittedSteps;
     for (const auto &dirtyId : dirtyIds) {
         const int pos = findRow(QString::fromStdString(dirtyId));
         if (pos < 0) continue;
@@ -570,25 +671,21 @@ void ItemModel::toggleDone(const QString &itemId) {
         if (src == m_items.end()) continue;
         m_rows[static_cast<size_t>(pos)].item = *src;
         QList<int> roles{ DoneRole, DoneAtRole };
-        if (dirtyId == stepsTaskId) {
+        if (stepsRoleIds.count(dirtyId)) {
             roles << StepsTotalRole << StepsDoneRole;
-            stepsRolesEmitted = true;
+            emittedSteps.insert(dirtyId);
         }
         const QModelIndex idx = index(pos);
         emit dataChanged(idx, idx, roles);
     }
-    // Progression des étapes sur la tâche, même si son `done` n'a pas bougé
-    // (ex. 1ʳᵉ étape sur 3 cochée).
-    if (!stepsTaskId.empty() && !stepsRolesEmitted) {
-        const int pos = findRow(QString::fromStdString(stepsTaskId));
-        if (pos >= 0) {
-            const QModelIndex idx = index(pos);
-            emit dataChanged(idx, idx, { StepsTotalRole, StepsDoneRole });
-        }
+    for (const auto &sid : stepsRoleIds) {
+        if (emittedSteps.count(sid)) continue;
+        const int pos = findRow(QString::fromStdString(sid));
+        if (pos < 0) continue;
+        const QModelIndex idx = index(pos);
+        emit dataChanged(idx, idx, { StepsTotalRole, StepsDoneRole });
     }
 
-    // Le nombre de lignes n'a pas bougé, mais la progression (mode Chantier /
-    // barre d'étapes) oui.
     emit doneCountChanged();
     emit refreshed();
 }
@@ -840,11 +937,12 @@ void ItemModel::moveItem(int from, int to) {
         : (hovered ? hovered->item.aisle : moved.aisle);
 
     // Les voisins qui comptent pour la position sont ceux du même groupe : même
-    // catégorie en mode catégorie, toute la liste en mode manuel / étapes. Le tri
-    // les sépare avant de regarder la position. L'état fait/à faire ne compte pas :
-    // il n'est pas trié.
+    // catégorie en mode catégorie, toute la liste en mode manuel. En mode étapes,
+    // uniquement les frères (même parentId) — l'arbre aplati n'est pas un seul groupe.
+    // L'état fait/à faire ne compte pas : il n'est pas trié.
     const auto sameGroup = [&](const Row *r) {
-        if (stepsMode()) return r != nullptr;
+        if (stepsMode())
+            return r && r->item.parentId == moved.parentId;
         return r && (m_manualSort || r->item.aisle == targetAisle);
     };
     const int64_t lo = sameGroup(before) ? before->item.order : 0;
@@ -863,7 +961,7 @@ void ItemModel::moveItem(int from, int to) {
     // Intervalle épuisé (des milliers de déplacements au même endroit) : renuméroter
     // le groupe à grands pas plutôt que d'écraser silencieusement l'ordre voulu.
     if (lo && hi && (order == lo || order == hi)) {
-        renumber(targetAisle);
+        renumber(stepsMode() ? moved.parentId : targetAisle);
         moveItem(from, to);   // les positions sont ré-espacées : rejouer le geste
         return;
     }
@@ -911,8 +1009,8 @@ void ItemModel::moveItem(int from, int to) {
 }
 
 // Ré-espace les positions d'un groupe (même catégorie ; toute la liste en mode
-// manuel / étapes) par pas de 1000.
-void ItemModel::renumber(const std::string &aisle) {
+// manuel ; frères du même parent en mode étapes) par pas de 1000.
+void ItemModel::renumber(const std::string &groupKey) {
     if (!m_db) return;
 
     const int64_t lamport = m_db->bumpLamport(m_listId);
@@ -920,10 +1018,12 @@ void ItemModel::renumber(const std::string &aisle) {
 
     int64_t next = 1000;
     for (auto &row : m_rows) {
-        // En mode manuel / étapes la catégorie ne délimite pas le groupe.
-        // Le statut `done` n'entre pas dans la définition du groupe.
-        if (!stepsMode() && !m_manualSort && row.item.aisle != aisle)
+        if (stepsMode()) {
+            if (row.item.parentId != groupKey)
+                continue;
+        } else if (!m_manualSort && row.item.aisle != groupKey) {
             continue;
+        }
         auto it = std::find_if(m_items.begin(), m_items.end(),
                                [&](const core::Item &i){ return i.itemId == row.item.itemId; });
         if (it == m_items.end()) continue;
@@ -944,14 +1044,20 @@ void ItemModel::uncheckAll() {
     const core::Ver ver{ lamport, m_deviceId };
     const int64_t now = QDateTime::currentMSecsSinceEpoch();
 
+    std::set<std::string> underRoot;
+    if (stepsMode()) {
+        for (const auto &id : descendantIds(m_parentId))
+            underRoot.insert(id);
+    }
+
     bool any = false;
     for (auto &item : m_items) {
         if (item.del || !item.done)
             continue;
-        // En mode étapes, ne toucher qu'aux étapes de la tâche ouverte (m_items
-        // contient toute la liste). En mode liste : tout, étapes comprises — « on
-        // recommence » vaut pour les tâches ET leurs étapes.
-        if (stepsMode() && item.parentId != m_parentId)
+        // En mode étapes : tout le sous-arbre de la tâche ouverte. En mode liste :
+        // tout, étapes comprises — « on recommence » vaut pour les tâches ET leurs
+        // sous-étapes.
+        if (stepsMode() && !underRoot.count(item.itemId))
             continue;
         item.done    = false;
         item.doneVer = ver;
@@ -970,15 +1076,18 @@ void ItemModel::uncheckAll() {
     rebuildRows();
 }
 
-// Tombstone d'un item + cascade sur ses étapes. Ne publie ni ne retrie : l'appelant
+// Tombstone d'un item + tous ses descendants. Ne publie ni ne retrie : l'appelant
 // regroupe (un seul localChanged / rebuild pour tout le lot).
 void ItemModel::tombstone(const std::string &itemId, const core::Ver &ver, int64_t nowMs) {
+    std::set<std::string> victims;
+    victims.insert(itemId);
+    for (const auto &id : descendantIds(itemId))
+        victims.insert(id);
+
     for (auto &item : m_items) {
-        if (item.del)
+        if (item.del || !victims.count(item.itemId))
             continue;
-        if (item.itemId != itemId && item.parentId != itemId)
-            continue;
-        // Une étape sans tâche n'a plus de sens — et sans tombstone répliqué, la
+        // Une étape orpheline n'a plus de sens — et sans tombstone répliqué, la
         // copie des autres la ferait réapparaître au prochain merge.
         item.del     = true;
         item.delVer  = ver;
@@ -994,15 +1103,35 @@ void ItemModel::removeDone() {
     const core::Ver ver{ lamport, m_deviceId };
     const int64_t now = QDateTime::currentMSecsSinceEpoch();
 
-    // En mode liste : les tâches faites partent avec toutes leurs étapes (faites ou
+    std::set<std::string> underRoot;
+    if (stepsMode()) {
+        for (const auto &id : descendantIds(m_parentId))
+            underRoot.insert(id);
+    }
+
+    // En mode liste : les tâches faites partent avec tout leur sous-arbre (fait ou
     // non). Les étapes cochées d'une tâche encore à faire restent — c'est de la
-    // progression, pas du travail terminé. En mode étapes : les étapes faites de la
-    // tâche ouverte seulement.
+    // progression, pas du travail terminé. En mode étapes : les nœuds faits du
+    // sous-arbre ouvert (toute profondeur).
     bool any = false;
-    for (auto &item : m_items) {
-        if (item.del || !item.done || item.parentId != m_parentId)
+    // Copier les ids cibles : tombstone mute m_items et peut retirer des descendants
+    // qu'on aurait re-parcourus.
+    std::vector<std::string> targets;
+    for (const auto &item : m_items) {
+        if (item.del || !item.done)
             continue;
-        tombstone(item.itemId, ver, now);
+        if (stepsMode()) {
+            if (!underRoot.count(item.itemId)) continue;
+        } else if (item.parentId != m_parentId) {
+            continue;
+        }
+        targets.push_back(item.itemId);
+    }
+    for (const auto &tid : targets) {
+        auto it = std::find_if(m_items.begin(), m_items.end(),
+                               [&](const core::Item &i){ return i.itemId == tid; });
+        if (it == m_items.end() || it->del) continue;  // déjà emporté par un ancêtre
+        tombstone(tid, ver, now);
         any = true;
     }
 
@@ -1027,13 +1156,18 @@ void ItemModel::removeItem(const QString &itemId) {
     const core::Ver ver{ lamport, m_deviceId };
     const int64_t now = QDateTime::currentMSecsSinceEpoch();
 
-    // Cascade : supprimer une tâche emporte ses étapes.
+    const auto descendants = descendantIds(id);
     tombstone(id, ver, now);
 
     emit localChanged(m_listId);
     emit aisleNamesChanged();
 
-    // Remove from visible rows.
+    // Plusieurs lignes peuvent disparaître (sous-arbre affiché) : reconstruire.
+    if (!descendants.empty()) {
+        rebuildRows();
+        return;
+    }
+
     const int pos = findRow(itemId);
     if (pos >= 0) {
         beginRemoveRows({}, pos, pos);

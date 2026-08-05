@@ -417,7 +417,9 @@ Item {
 
                 SwipeDelegate {
                     id: row
-                    readonly property int stepIndent: model.isStep ? 26 : 0
+                    // Indentation : étapes (et sous-étapes) en retrait sous leur tâche.
+                    readonly property int stepIndent: model.isStep
+                        ? (20 + model.depth * 16) : 0
                     width: wrapper.width - 2 * Theme.gap - stepIndent
                     x: Theme.gap + stepIndent
                     // S'adapte au nom enroulé (WordWrap) : une ligne courte reste compacte.

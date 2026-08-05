@@ -383,28 +383,24 @@ Item {
             Label {
                 Layout.fillWidth: true
                 visible: AppController.steps.count === 0
-                text: "Découpez la tâche en étapes à cocher — chacun voit où elle en est."
+                text: "Découpez la tâche en étapes — et chaque étape en sous-étapes."
                 color: Theme.textDim
                 font.pixelSize: 13
                 wrapMode: Text.WordWrap
             }
 
-            // Les étapes gardent leur place une fois cochées (tri du modèle) : la
-            // séquence « démonter, poncer, repeindre » reste lisible telle quelle.
-            // Un tap sur le texte ouvre le menu de l'étape (modifier, échéance,
-            // agenda, retrait) ; la poignée à droite glisse pour réordonner.
-            //
-            // Conteneur immobile (place dans la colonne + zone de dépôt) contenant
-            // la ligne, qui se détache sous le doigt pendant un glissement.
+            // Les étapes (et sous-étapes) gardent leur place une fois cochées.
+            // Indentation = profondeur dans l'arbre. Tap → menu ; poignée → réordonner
+            // entre frères (même parent).
             Repeater {
                 model: AppController.steps
 
                 delegate: Item {
                     id: stepWrapper
                     Layout.fillWidth: true
-                    implicitHeight: model.due > 0 ? 58 : 52
+                    Layout.leftMargin: model.depth * 18
+                    implicitHeight: Math.max(52, stepRowContent.implicitHeight + 12)
 
-                    // Pas de `required property int index` (couperait le contexte du modèle).
                     property int rowIndex: index
                     property bool held: false
                     z: held ? 2 : 1
@@ -434,15 +430,13 @@ Item {
                         Drag.hotSpot.x: width / 2
                         Drag.hotSpot.y: height / 2
                         opacity: stepWrapper.held ? 0.85 : 1.0
-                        // Pendant le glissement, la ligne quitte son conteneur (géré
-                        // par le layout) pour la page : elle reste sous le doigt
-                        // pendant que les autres se réorganisent.
                         states: State {
                             when: stepWrapper.held
                             ParentChange { target: stepRow; parent: root }
                         }
 
                         RowLayout {
+                            id: stepRowContent
                             anchors.fill: parent
                             spacing: 0
 
@@ -476,18 +470,29 @@ Item {
 
                                 Label {
                                     Layout.fillWidth: true
-                                    visible: (model.dueNote && model.dueNote.length > 0)
-                                             || model.due > 0
-                                    text: (model.dueNote && model.dueNote.length > 0)
-                                          ? model.dueNote : root.dueText(model.due)
+                                    visible: text.length > 0
+                                    text: {
+                                        const parts = []
+                                        if (model.stepsTotal > 0)
+                                            parts.push(model.stepsDone + "/" + model.stepsTotal
+                                                       + " sous-étape"
+                                                       + (model.stepsTotal > 1 ? "s" : ""))
+                                        if (model.dueNote && model.dueNote.length > 0)
+                                            parts.push(model.dueNote)
+                                        else if (model.due > 0)
+                                            parts.push(root.dueText(model.due))
+                                        return parts.join(" · ")
+                                    }
                                     color: root.isOverdue(model.due) && !model.done
                                            && !(model.dueNote && model.dueNote.length > 0)
-                                           ? Theme.danger : Theme.textDim
+                                           ? Theme.danger
+                                           : (model.stepsTotal > 0
+                                              && model.stepsDone === model.stepsTotal
+                                              ? Theme.accent : Theme.textDim)
                                     font.pixelSize: 12
                                     wrapMode: Text.WordWrap
                                 }
 
-                                // Le texte de l'étape est la poignée de son menu.
                                 TapHandler {
                                     onTapped: {
                                         stepMenu.stepId      = model.itemId
@@ -502,9 +507,6 @@ Item {
                                 }
                             }
 
-                            // Poignée de déplacement : on la glisse pour réordonner la
-                            // séquence. `held` fige la page le temps du geste. (La
-                            // suppression, elle, vit dans le menu de l'étape.)
                             MouseArea {
                                 Layout.rightMargin: 2
                                 Layout.alignment: Qt.AlignVCenter
@@ -530,8 +532,7 @@ Item {
                 }
             }
 
-            // Ajout d'étape : bouton qui ouvre une modale centrée (évite que le
-            // clavier cache le champ en bas d'une longue liste).
+            // Ajout d'étape racine (sous la tâche ouverte).
             Button {
                 Layout.fillWidth: true
                 flat: true
@@ -700,6 +701,35 @@ Item {
         onAccepted: root.addStep(addStepName.text)
     }
 
+    ColoDialog {
+        id: addChildDialog
+        title: "Sous-étape"
+        acceptText: "Ajouter"
+        acceptEnabled: addChildName.text.trim().length > 0
+
+        property string parentStepId: ""
+
+        function openFor(parentId, parentName) {
+            parentStepId = parentId
+            title = parentName && parentName.length > 0
+                    ? "Sous-étape de « " + parentName + " »"
+                    : "Sous-étape"
+            addChildName.text = ""
+            open()
+            addChildName.forceActiveFocus()
+        }
+
+        ColoTextField {
+            id: addChildName
+            Layout.fillWidth: true
+            hint: "Sous-étape"
+            onAccepted: if (addChildDialog.acceptEnabled) addChildDialog.accept()
+        }
+
+        onAccepted: AppController.steps.addChild(addChildDialog.parentStepId,
+                                                 addChildName.text.trim())
+    }
+
     // --- Photo en plein écran ---
     Popup {
         id: photoViewer
@@ -752,6 +782,10 @@ Item {
         MenuItem {
             text: "Modifier l'étape"
             onTriggered: stepEditDialog.openFor(stepMenu.stepId, stepMenu.stepName)
+        }
+        MenuItem {
+            text: "Ajouter une sous-étape"
+            onTriggered: addChildDialog.openFor(stepMenu.stepId, stepMenu.stepName)
         }
         MenuItem {
             text: (stepMenu.stepDue > 0 || stepMenu.stepDueNote.length > 0)

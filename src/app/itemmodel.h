@@ -62,6 +62,8 @@ public:
         DueNoteRole,
         // Cette ligne est une étape dépliée sous sa tâche (mode « Au boulot »).
         IsStepRole,
+        // Profondeur dans l'arbre affiché (0 = racine de la vue courante).
+        DepthRole,
     };
 
     // Rayons d'origine, dans l'ordre où on traverse un magasin. C'est cet ordre qui trie
@@ -115,6 +117,9 @@ public:
 public slots:
     void addItem(const QString &name, const QString &qty,
                  const QString &note = {}, const QString &aisle = {});
+
+    // Sous-étape sous un parent existant (tâche ou étape). Pas de favoris.
+    void addChild(const QString &parentId, const QString &name);
 
     // Déplacer une ligne visible : `from` et `to` sont des index de la vue. Franchir
     // une frontière de section change aussi le rayon de l'article — c'est le geste
@@ -175,6 +180,8 @@ private:
         // celui de sa tâche : une étape n'a pas de catégorie propre à l'écran.
         bool        isStep = false;
         std::string sectionAisle;
+        // 0 = racine de la vue (tâche en mode liste, enfant direct en mode étapes).
+        int         depth = 0;
     };
 
     // Find visible row index by itemId (-1 if not found).
@@ -198,18 +205,26 @@ private:
 
     // Ré-espace les positions d'un groupe quand l'intervalle entre deux voisins est
     // épuisé. Le groupe = même rayon (en mode rayon) ; en mode manuel, tous rayons
-    // confondus. Le statut `done` n'entre pas dans la définition du groupe.
-    void renumber(const std::string &aisle);
+    // confondus ; en mode étapes, les frères du même parentId. Le statut `done`
+    // n'entre pas dans la définition du groupe.
+    void renumber(const std::string &groupKey);
 
-    // Tombstone d'une tâche + cascade sur ses étapes (une étape sans tâche n'a plus
-    // de sens, et resurgirait au merge si on ne la supprimait que localement).
+    // Tombstone d'un item + tous ses descendants (une étape orpheline n'a plus de
+    // sens, et resurgirait au merge si on ne la supprimait que localement).
     void tombstone(const std::string &itemId, const core::Ver &ver, int64_t nowMs);
+
+    // Tous les descendants non-supprimés de `rootId` (toute profondeur).
+    std::vector<std::string> descendantIds(const std::string &rootId) const;
+
+    // Enfants de parentId en ordre, récursivement, profondeur croissante.
+    void appendTree(std::vector<Row> &out, const std::string &parentId,
+                    int depth, bool asSteps, const std::string &sectionAisle);
 
     // Liste des photos d'une tâche, et écriture de la liste complète (champ LWW).
     QStringList imageList(const QString &itemId) const;
     void writeImageList(const QString &itemId, const QStringList &shas);
 
-    // Recalcule la progression des étapes par tâche (mode liste uniquement).
+    // Recalcule la progression des enfants directs par nœud (chaque nœud : n/m).
     void rebuildStepCounts();
 
     bool stepsMode() const { return !m_parentId.empty(); }
@@ -223,7 +238,7 @@ private:
     bool             m_manualSort = false;  // mode de classement de la liste chargée
     bool             m_showSteps  = false;  // étapes dépliées (mode « Au boulot »)
 
-    // Progression des étapes par tâche (mode liste) : itemId → {total, faites}.
+    // Progression des enfants directs par nœud : itemId → {total, faits}.
     std::map<std::string, std::pair<int, int>> m_stepCounts;
 
     // deviceId → nom affiché, pour dire qui a ajouté quoi. Chargé avec la liste.

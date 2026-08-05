@@ -9,6 +9,7 @@
 #include <QJsonObject>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QUrl>
 #include <QDebug>
@@ -17,13 +18,21 @@ namespace app {
 
 namespace {
 
-// Le dépôt qui publie les releases. Changer de dépôt = changer cette ligne.
-constexpr const char* kLatestReleaseApi =
-    "https://api.github.com/repos/Poisson48/Colo_Taches/releases/latest";
+constexpr const char* kReleasesApi =
+    "https://api.github.com/repos/Poisson48/Colo_Taches/releases?per_page=30";
+
+constexpr const char* kSeenNotesKey = "updater/seenNotesVersion";
 
 #ifndef COLO_APP_VERSION
 #  define COLO_APP_VERSION "0.0.0"
 #endif
+
+QString stripV(QString v)
+{
+    if (v.startsWith(QLatin1Char('v')) || v.startsWith(QLatin1Char('V')))
+        v.remove(0, 1);
+    return v;
+}
 
 } // namespace
 
@@ -51,16 +60,13 @@ QString Updater::notesFromBody(const QString &body)
     for (const QString &line : body.split(QLatin1Char('\n'))) {
         const QString trimmed = line.trimmed();
         if (trimmed == QStringLiteral("---"))
-            break;   // à partir d'ici, c'est la page GitHub qui parle, pas l'app
-        // Les titres Markdown (« ## Nouveautés ») n'ont pas de rendu ici : le « # »
-        // s'afficherait tel quel.
+            break;
         QString clean = line;
         while (clean.startsWith(QLatin1Char('#')))
             clean.remove(0, 1);
         kept << clean.trimmed();
     }
 
-    // Lignes vides en trop en fin de bloc.
     while (!kept.isEmpty() && kept.last().isEmpty())
         kept.removeLast();
 
@@ -74,7 +80,6 @@ bool Updater::isNewer(const QString &candidate, const QString &current)
             v.remove(0, 1);
         QList<int> out;
         for (const QString &p : v.split(QLatin1Char('.'))) {
-            // "0-rc1" → 0 : on ne garde que les chiffres de tête du composant.
             int digits = 0;
             while (digits < p.size() && p.at(digits).isDigit())
                 ++digits;
@@ -88,8 +93,6 @@ bool Updater::isNewer(const QString &candidate, const QString &current)
     if (a.isEmpty())
         return false;
 
-    // Comparaison composant par composant : "0.10.0" bat "0.9.1", ce qu'un simple
-    // `>` sur les chaînes n'aurait pas vu.
     for (int i = 0; i < std::max(a.size(), b.size()); ++i) {
         const int x = i < a.size() ? a[i] : 0;
         const int y = i < b.size() ? b[i] : 0;
@@ -97,6 +100,58 @@ bool Updater::isNewer(const QString &candidate, const QString &current)
             return x > y;
     }
     return false;
+}
+
+QString Updater::formatEntries(const QVariantList &entries)
+{
+    QStringList blocks;
+    for (const QVariant &v : entries) {
+        const QVariantMap m = v.toMap();
+        const QString ver = m.value(QStringLiteral("version")).toString();
+        const QString notes = m.value(QStringLiteral("notes")).toString().trimmed();
+        if (ver.isEmpty())
+            continue;
+        if (notes.isEmpty())
+            blocks << QStringLiteral("Version %1").arg(ver);
+        else
+            blocks << QStringLiteral("Version %1\n\n%2").arg(ver, notes);
+    }
+    return blocks.join(QStringLiteral("\n\n————————————\n\n")).trimmed();
+}
+
+void Updater::rebuildDerivedNotes()
+{
+    const QString current = currentVersion();
+    QSettings settings;
+    const QString seen = stripV(
+        settings.value(QLatin1String(kSeenNotesKey), QString()).toString());
+
+    QVariantList pending;   // > current
+    QVariantList whatsNew;  // <= current && > seen (ou tout <= current si never seen)
+
+    for (const QVariant &v : m_changelog) {
+        const QVariantMap m = v.toMap();
+        const QString ver = m.value(QStringLiteral("version")).toString();
+        if (ver.isEmpty())
+            continue;
+        if (isNewer(ver, current)) {
+            pending.append(m);
+        } else if (seen.isEmpty() || isNewer(ver, seen)) {
+            // Inclure la version installée elle-même dans le « après maj ».
+            whatsNew.append(m);
+        }
+    }
+
+    m_releaseNotes  = formatEntries(pending);
+    // Première install : pas de « quoi de neuf » (tout serait du bruit). On pose
+    // seen = current silencieusement.
+    if (seen.isEmpty()) {
+        settings.setValue(QLatin1String(kSeenNotesKey), current);
+        m_whatsNewNotes.clear();
+    } else {
+        m_whatsNewNotes = formatEntries(whatsNew);
+    }
+    emit changelogChanged();
 }
 
 void Updater::setState(State s)
@@ -121,7 +176,7 @@ void Updater::check()
 
     setState(Checking);
 
-    QNetworkRequest req{ QUrl(QString::fromLatin1(kLatestReleaseApi)) };
+    QNetworkRequest req{ QUrl(QString::fromLatin1(kReleasesApi)) };
     req.setRawHeader("Accept", "application/vnd.github+json");
     req.setRawHeader("User-Agent", "ColoTaches");
 
@@ -131,40 +186,70 @@ void Updater::check()
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         reply->deleteLater();
 
-        // Hors ligne, quota GitHub atteint, release absente : on retombe simplement
-        // dans l'état « rien à signaler ». Ce n'est pas une panne de l'app.
         if (reply->error() != QNetworkReply::NoError) {
             setState(Idle);
             return;
         }
 
-        const QJsonObject obj =
-            QJsonDocument::fromJson(reply->readAll()).object();
+        const QJsonArray arr = QJsonDocument::fromJson(reply->readAll()).array();
 
-        const QString tag = obj.value(QStringLiteral("tag_name")).toString();
-        m_releaseUrl = obj.value(QStringLiteral("html_url")).toString();
-
-        // Le corps de la release porte d'abord les nouveautés, puis une ligne « --- »,
-        // puis les consignes d'installation (utiles sur la page GitHub, hors sujet
-        // dans l'app : on est déjà en train d'installer). On coupe au séparateur.
-        m_releaseNotes = notesFromBody(obj.value(QStringLiteral("body")).toString());
-
+        m_changelog.clear();
         m_apkUrl.clear();
-        for (const QJsonValue &v : obj.value(QStringLiteral("assets")).toArray()) {
-            const QJsonObject asset = v.toObject();
-            const QString name = asset.value(QStringLiteral("name")).toString();
-            if (name.endsWith(QStringLiteral(".apk"), Qt::CaseInsensitive)) {
-                m_apkUrl = asset.value(QStringLiteral("browser_download_url")).toString();
-                break;
+        m_releaseUrl.clear();
+        m_latestVersion.clear();
+
+        const QString current = currentVersion();
+        QString bestNewer;
+
+        for (const QJsonValue &v : arr) {
+            const QJsonObject obj = v.toObject();
+            if (obj.value(QStringLiteral("draft")).toBool())
+                continue;
+            if (obj.value(QStringLiteral("prerelease")).toBool())
+                continue;
+
+            const QString tag = obj.value(QStringLiteral("tag_name")).toString();
+            const QString ver = stripV(tag);
+            if (ver.isEmpty())
+                continue;
+
+            const QString notes = notesFromBody(
+                obj.value(QStringLiteral("body")).toString());
+            const QString published =
+                obj.value(QStringLiteral("published_at")).toString();
+
+            QVariantMap entry;
+            entry.insert(QStringLiteral("version"), ver);
+            entry.insert(QStringLiteral("notes"), notes);
+            entry.insert(QStringLiteral("publishedAt"), published);
+            m_changelog.append(entry);
+
+            if (isNewer(ver, current)) {
+                if (bestNewer.isEmpty() || isNewer(ver, bestNewer)) {
+                    bestNewer = ver;
+                    m_releaseUrl = obj.value(QStringLiteral("html_url")).toString();
+                    m_apkUrl.clear();
+                    for (const QJsonValue &a : obj.value(QStringLiteral("assets")).toArray()) {
+                        const QJsonObject asset = a.toObject();
+                        const QString name = asset.value(QStringLiteral("name")).toString();
+                        if (name.endsWith(QStringLiteral(".apk"), Qt::CaseInsensitive)) {
+                            m_apkUrl = asset.value(QStringLiteral("browser_download_url"))
+                                           .toString();
+                            break;
+                        }
+                    }
+                }
             }
         }
 
-        if (tag.isEmpty() || !isNewer(tag, currentVersion())) {
+        rebuildDerivedNotes();
+
+        if (bestNewer.isEmpty()) {
             setState(Idle);
             return;
         }
 
-        m_latestVersion = tag.startsWith(QLatin1Char('v')) ? tag.mid(1) : tag;
+        m_latestVersion = bestNewer;
         setState(Available);
     });
 }
@@ -172,7 +257,6 @@ void Updater::check()
 void Updater::download()
 {
     if (m_apkUrl.isEmpty()) {
-        // Release sans APK (ou plateforme sans installation) : au moins ouvrir la page.
         install();
         return;
     }
@@ -186,8 +270,6 @@ void Updater::download()
 
     QNetworkRequest req{ QUrl(m_apkUrl) };
     req.setRawHeader("User-Agent", "ColoTaches");
-    // browser_download_url redirige vers le CDN : sans suivre la redirection, on
-    // téléchargerait une page de 0 octet.
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::NoLessSafeRedirectPolicy);
 
@@ -221,8 +303,6 @@ void Updater::download()
         const qint64 written = out.write(body);
         out.close();
 
-        // Un APK tronqué serait refusé par Android avec un message incompréhensible :
-        // mieux vaut échouer ici, explicitement.
         if (written != body.size() || body.isEmpty()) {
             QFile::remove(m_apkPath);
             setState(Failed);
@@ -242,7 +322,6 @@ void Updater::install()
         return;
     }
 
-    // Desktop (ou installation native impossible) : la page de la release, à défaut.
     if (!m_releaseUrl.isEmpty())
         QDesktopServices::openUrl(QUrl(m_releaseUrl));
 }
@@ -252,6 +331,14 @@ void Updater::dismiss()
     if (m_reply)
         m_reply->abort();
     setState(Idle);
+}
+
+void Updater::acknowledgeNotes()
+{
+    QSettings settings;
+    settings.setValue(QLatin1String(kSeenNotesKey), currentVersion());
+    m_whatsNewNotes.clear();
+    emit changelogChanged();
 }
 
 } // namespace app

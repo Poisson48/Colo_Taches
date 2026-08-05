@@ -1257,6 +1257,109 @@ private slots:
         QCOMPARE(model.count(), 2);
     }
 
+    // Sous-étapes imbriquées : arbre aplati, cascade done, tombstone récursif.
+    void test_nestedSteps() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        Database db;
+        QVERIFY(openDb(db, dir));
+        const auto listId = makeList(db);
+
+        ItemModel tasks;
+        tasks.load(db, listId, "dev-A");
+        tasks.addItem("Repeindre le volet", "");
+        const QString taskId = tasks.data(tasks.index(0), ItemModel::ItemIdRole).toString();
+
+        ItemModel steps;
+        steps.load(db, listId, "dev-A", taskId.toStdString());
+        steps.addItem("A", "");
+        steps.addItem("B", "");
+        const QString idA = steps.data(steps.index(0), ItemModel::ItemIdRole).toString();
+        const QString idB = steps.data(steps.index(1), ItemModel::ItemIdRole).toString();
+
+        steps.addChild(idA, "A1");
+        QCOMPARE(steps.count(), 3);
+        QCOMPARE(steps.data(steps.index(0), ItemModel::NameRole).toString(), QStringLiteral("A"));
+        QCOMPARE(steps.data(steps.index(0), ItemModel::DepthRole).toInt(), 0);
+        QCOMPARE(steps.data(steps.index(1), ItemModel::NameRole).toString(), QStringLiteral("A1"));
+        QCOMPARE(steps.data(steps.index(1), ItemModel::DepthRole).toInt(), 1);
+        QCOMPARE(steps.data(steps.index(2), ItemModel::NameRole).toString(), QStringLiteral("B"));
+        QCOMPARE(steps.data(steps.index(2), ItemModel::DepthRole).toInt(), 0);
+
+        const QString idA1 = steps.data(steps.index(1), ItemModel::ItemIdRole).toString();
+
+        // Cocher A → A1 suit ; la tâche attend encore B.
+        steps.toggleDone(idA);
+        QVERIFY(steps.data(steps.index(0), ItemModel::DoneRole).toBool());
+        QVERIFY(steps.data(steps.index(1), ItemModel::DoneRole).toBool());
+        QVERIFY(!steps.data(steps.index(2), ItemModel::DoneRole).toBool());
+
+        const auto itemDone = [&](const QString &id) {
+            for (const auto &it : db.getItems(listId))
+                if (it.itemId == id.toStdString()) return it.done;
+            return false;
+        };
+        QVERIFY(!itemDone(taskId));
+
+        steps.toggleDone(idB);
+        QVERIFY(itemDone(taskId));
+
+        // addChild sous A, puis supprimer A → A1 tombstoné aussi.
+        steps.toggleDone(idA);   // rouvre A (+ A1) et la tâche
+        steps.toggleDone(idB);
+        steps.addChild(idA, "A2");
+        QCOMPARE(steps.count(), 4);
+        const QString idA2 = [&]() {
+            for (int i = 0; i < steps.count(); ++i)
+                if (steps.data(steps.index(i), ItemModel::NameRole).toString() == "A2")
+                    return steps.data(steps.index(i), ItemModel::ItemIdRole).toString();
+            return QString();
+        }();
+        QVERIFY(!idA2.isEmpty());
+
+        steps.removeItem(idA);
+        QCOMPARE(steps.count(), 1);
+        QCOMPARE(steps.data(steps.index(0), ItemModel::NameRole).toString(), QStringLiteral("B"));
+        for (const auto &it : db.getItems(listId)) {
+            if (it.itemId == idA.toStdString() || it.itemId == idA1.toStdString()
+                || it.itemId == idA2.toStdString())
+                QVERIFY(it.del);
+        }
+
+        // showSteps déplie tout le sous-arbre sous la tâche.
+        ItemModel steps2;
+        steps2.load(db, listId, "dev-A", taskId.toStdString());
+        steps2.addItem("A", "");
+        QString newA;
+        for (int i = 0; i < steps2.count(); ++i) {
+            if (steps2.data(steps2.index(i), ItemModel::NameRole).toString() == "A")
+                newA = steps2.data(steps2.index(i), ItemModel::ItemIdRole).toString();
+        }
+        QVERIFY(!newA.isEmpty());
+        steps2.addChild(newA, "A1");
+
+        ItemModel list;
+        list.load(db, listId, "dev-A");
+        list.setShowSteps(true);
+        // Tâche + A + A1 + B
+        QCOMPARE(list.count(), 4);
+        QCOMPARE(list.data(list.index(0), ItemModel::NameRole).toString(),
+                 QStringLiteral("Repeindre le volet"));
+        QVERIFY(!list.data(list.index(0), ItemModel::IsStepRole).toBool());
+
+        QStringList names;
+        for (int i = 1; i < list.count(); ++i)
+            names << list.data(list.index(i), ItemModel::NameRole).toString();
+        QVERIFY(names.contains(QStringLiteral("A")));
+        QVERIFY(names.contains(QStringLiteral("A1")));
+        QVERIFY(names.contains(QStringLiteral("B")));
+        // A1 immédiatement sous A dans l'aplatissement.
+        const int idxA = names.indexOf(QStringLiteral("A"));
+        QCOMPARE(names.at(idxA + 1), QStringLiteral("A1"));
+        QCOMPARE(list.data(list.index(idxA + 1), ItemModel::DepthRole).toInt(), 0); // A
+        QCOMPARE(list.data(list.index(idxA + 2), ItemModel::DepthRole).toInt(), 1); // A1
+    }
+
     // L'échéance est facultative : posée, changée, retirée — champ LWW versionné,
     // valable pour une tâche comme pour une étape.
     void test_setDue() {

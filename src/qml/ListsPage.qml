@@ -115,6 +115,15 @@ Item {
         id: overflowMenu
 
         MenuItem {
+            text: "Notes de version"
+            onTriggered: {
+                const w = root.Window.window
+                if (w && typeof w.openChangelog === "function")
+                    w.openChangelog()
+            }
+        }
+        MenuSeparator {}
+        MenuItem {
             text: "Gérer les catégories"
             onTriggered: aislesDialog.open()
         }
