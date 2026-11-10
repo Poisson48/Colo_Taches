@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.24)
 
+# libdatachannel/plog déclare encore cmake_minimum_required(3.0) : CMake 4.x
+# refuse cette compatibilité sans ce plancher de politique. Inoffensif sur CMake 3.x.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+
 project(colotaches VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -39,6 +43,35 @@ FetchContent_Declare(zxing
     GIT_TAG        v2.2.1
 )
 FetchContent_MakeAvailable(zxing)
+
+# libdatachannel : data channels WebRTC pour la synchronisation P2P.
+# Statique, DTLS via OpenSSL (Android : fourni par android_openssl).
+include(FetchContent)
+
+if(ANDROID)
+    FetchContent_Declare(android_openssl
+        GIT_REPOSITORY https://github.com/KDAB/android_openssl.git
+        GIT_TAG        master
+    )
+    FetchContent_MakeAvailable(android_openssl)
+    include(${android_openssl_SOURCE_DIR}/android_openssl.cmake)
+
+    # FindOpenSSL (utilisé par libdatachannel) ne connaît pas les variables de
+    # KDAB : on les lui fournit explicitement avant son configure.
+    set(OPENSSL_INCLUDE_DIR "${OPENSSL_INCLUDE_DIR}")
+    set(OPENSSL_CRYPTO_LIBRARY "${OPENSSL_LIB_DIR}/${libcrypto}")
+    set(OPENSSL_SSL_LIBRARY "${OPENSSL_LIB_DIR}/${libssl}")
+endif()
+
+set(NO_MEDIA     ON CACHE BOOL "" FORCE)
+set(NO_WEBSOCKET ON CACHE BOOL "" FORCE)
+set(NO_EXAMPLES  ON CACHE BOOL "" FORCE)
+set(NO_TESTS     ON CACHE BOOL "" FORCE)
+FetchContent_Declare(libdatachannel
+    GIT_REPOSITORY https://github.com/paullouisageneau/libdatachannel.git
+    GIT_TAG        v0.22.5
+)
+FetchContent_MakeAvailable(libdatachannel)
 
 add_subdirectory(src)
 

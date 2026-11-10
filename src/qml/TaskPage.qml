@@ -742,7 +742,11 @@ Item {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
         property string sha: ""
-        function openFor(s) { sha = s; open() }
+        function openFor(s) {
+            sha = s
+            AppController.requestHd(s)
+            open()
+        }
 
         background: Rectangle { color: Qt.rgba(0, 0, 0, 0.92) }
 
@@ -752,7 +756,7 @@ Item {
                 anchors.margins: 8
                 source: photoViewer.sha.length > 0
                         ? "image://taskimg/" + photoViewer.sha
-                          + "?r=" + AppController.imageRevision
+                          + "?hd=1&r=" + AppController.imageRevision
                         : ""
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true

@@ -104,11 +104,11 @@ version reçues ; sinon ignorer. Item inconnu localement → l'insérer tel quel
   circule JAMAIS dans les payloads. Un pair très en retard peut théoriquement ressusciter
   un item purgé — accepté en v1 (impact : un article réapparaît).
 
-## 3. Transport : relais Nostr
+## 3. Transport : hybride relais Nostr + P2P WebRTC
 
 ### 3.1 Principe
 
-Store-and-forward via relais Nostr publics (NIP-01, WebSocket + JSON). Les relais ne voient
+Le relais privé reste le store-and-forward durable (NIP-01, WebSocket + JSON). Le transport P2P WebRTC (signaling + TURN) est utilisé en parallèle quand les pairs sont joignables ; il ne stocke rien. Les relais ne voient
 que des blobs chiffrés. Ensemble par défaut (modifiable dans les réglages) :
 `wss://relay.damus.io`, `wss://nos.lol`, `wss://relay.nostr.band`, `wss://offchain.pub`.
 Publication sur TOUS les relais joignables ; réception dédupliquée par id d'événement.

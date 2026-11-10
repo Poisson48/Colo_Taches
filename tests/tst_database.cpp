@@ -714,6 +714,22 @@ private slots:
         QVERIFY(db.purgeOrphanImages());
         QVERIFY(!db.hasImage("sha-abc"));
     }
+    void testImageHdVariant()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        Database db;
+        QVERIFY(db.open(dir.filePath("test.db")));
+
+        const QByteArray thumb("thumb");
+        const QByteArray hd("hd-full-resolution");
+        QVERIFY(db.putImageHd("sha-hd", hd));
+        QVERIFY(db.hasImageHd("sha-hd"));
+        QCOMPARE(db.getImageHd("sha-hd"), hd);
+        QVERIFY(db.putImage("sha-hd", thumb));
+        QCOMPARE(db.getImage("sha-hd"), thumb);
+        QCOMPARE(db.getImageHd("sha-hd"), hd);
+    }
 };
 
 QTEST_MAIN(DatabaseTest)

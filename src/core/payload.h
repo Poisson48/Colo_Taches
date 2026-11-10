@@ -42,6 +42,7 @@ struct Payload {
     // indifférent (l'UI affiche la photo dès que le blob est là).
     std::string          imageSha;
     std::vector<uint8_t> imageData;
+    std::string          imageVariant = "thumb";
 };
 
 // Deserialize a JSON string into a Payload.
@@ -58,6 +59,7 @@ std::string serializePayload(const Payload& p);
 std::string serializeImagePayload(const std::string& listId,
                                   const std::string& by,
                                   const std::string& sha,
-                                  const std::vector<uint8_t>& data);
+                                  const std::vector<uint8_t>& data,
+                                  const std::string& variant = "thumb");
 
 } // namespace core

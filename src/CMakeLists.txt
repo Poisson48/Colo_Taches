@@ -16,14 +16,23 @@ add_library(net STATIC
     net/nostr.cpp
     net/relayclient.cpp
     net/relaypool.cpp
+    net/synctransport.cpp
+    net/webrtctransport.cpp
+    net/hybridtransport.cpp
 )
 
 target_include_directories(net PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(net PUBLIC
     Qt6::Core
+    Qt6::Network
     Qt6::WebSockets
+    datachannel-static
 )
+
+if(ANDROID)
+    target_link_libraries(net PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+endif()
 
 # --- core static library (pure C++/STL, no Qt) ---
 add_library(core STATIC
@@ -187,12 +196,5 @@ target_compile_definitions(applib PUBLIC COLO_APP_VERSION="${COLO_VERSION_NAME}"
 # Android n'embarque pas OpenSSL : sans ces .so, QSslSocket est muet et les
 # connexions wss:// aux relais échouent silencieusement.
 if(ANDROID)
-    include(FetchContent)
-    FetchContent_Declare(android_openssl
-        GIT_REPOSITORY https://github.com/KDAB/android_openssl.git
-        GIT_TAG master
-    )
-    FetchContent_MakeAvailable(android_openssl)
-    include(${android_openssl_SOURCE_DIR}/android_openssl.cmake)
     add_android_openssl_libraries(colotaches)
 endif()

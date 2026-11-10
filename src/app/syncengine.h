@@ -11,7 +11,7 @@
 #include <optional>
 
 #include "../core/types.h"
-#include "../net/relaypool.h"
+#include "../net/synctransport.h"
 #include "../net/nostr.h"
 #include "../store/database.h"
 
@@ -48,10 +48,10 @@ public:
     explicit SyncEngine(QObject* parent = nullptr);
     ~SyncEngine() override;
 
-    // Initialize with DB, RelayPool, device identity.
-    // Does NOT take ownership of db or pool (caller owns).
+    // Initialize with DB, SyncTransport, device identity.
+    // Does NOT take ownership of db or transport (caller owns).
     void init(store::Database* db,
-              net::RelayPool*  pool,
+              net::SyncTransport* transport,
               const QString&   deviceId,
               const QString&   displayName);
 
@@ -68,6 +68,7 @@ public:
     // Appelé à l'ajout d'une photo, et au snapshot pour re-semer les blobs
     // référencés (rétention limitée des relais).
     void publishImage(const std::string& listId, const std::string& sha);
+    void publishImageHd(const std::string& listId, const std::string& sha);
 
     // Called by AppController/ItemModel after a local modification.
     // Schedules a debounced publish for listId.
@@ -93,6 +94,9 @@ signals:
     // La file d'attente d'envoi a bougé (ajout, ou accusé de réception d'un relais).
     void outboxChanged();
 
+    // Le relais a refusé un événement (politique d'écriture, quota…).
+    void publishRejected(const QString& message);
+
     // Forwarded online state (so AppController can bind its property).
     void onlineChanged(bool online);
 
@@ -100,6 +104,10 @@ private slots:
     void onRelayEvent(const net::NostrEvent& ev);
     void onRelayOnline(bool online);
     void onPublishAck(const QString& eventId, bool accepted, const QString& msg);
+    void onPublishAckKind(const QString& eventId, net::AckKind kind, const QString& msg);
+    void onImageRequested(const QString& channelTag, const QString& peerId,
+                          const QString& sha, const QString& variant);
+    void onCatchUpRequested(const QString& channelTag, const QString& peerId, int64_t since);
     void onDebounceTimer();
 
 private:
@@ -108,11 +116,19 @@ private:
 
     // Publish a full snapshot for listId.
     void publishSnap(const std::string& listId);
+    std::string snapPayloadJson(const std::string& listId);
+    void publishSnapToPeer(const std::string& listId, const QString& peerId);
 
     // Encrypt, sign, and publish a payload string for listId.
     // If sign fails, do not publish. Stores in outbox.
     // Returns event id string (empty on error).
+    std::optional<net::NostrEvent> buildEvent(const std::string& listId,
+                                              const std::string& payloadJson);
     std::string buildAndPublish(const std::string& listId, const std::string& payloadJson);
+    void publishImageToPeer(const std::string& listId, const std::string& sha,
+                            const QString& peerId);
+    void publishImageHdToPeer(const std::string& listId, const std::string& sha,
+                              const QString& peerId);
 
     // Flush the outbox for all known lists (called on reconnect).
     void flushOutbox();
@@ -141,7 +157,7 @@ private:
     void showNotification(const QString& title, const QString& body, qint64 whenMs = 0);
 
     store::Database* m_db     = nullptr;
-    net::RelayPool*  m_pool   = nullptr;
+    net::SyncTransport* m_pool = nullptr;
     QString          m_deviceId;
     QString          m_displayName;
 

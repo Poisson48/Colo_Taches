@@ -200,3 +200,11 @@ add_test(NAME qrdecode COMMAND tst_qrdecode)
 # QTEST_MAIN instancie une QGuiApplication : sans display (CI, conteneur), le test
 # avorte au démarrage. Le rendu du QR se fait sur une QImage, aucun écran requis.
 set_tests_properties(qrdecode PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# --- WebRTC loopback (deux transports, signaling local) ---
+qt_add_executable(tst_webrtc
+    tst_webrtc.cpp
+)
+target_include_directories(tst_webrtc PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(tst_webrtc PRIVATE net Qt6::Test Qt6::WebSockets)
+add_test(NAME webrtc COMMAND tst_webrtc)
