@@ -34,7 +34,7 @@ l'app est ouverte**.
 
 ## 3. Sans Google
 
-### 3.1 Différé (par défaut)
+### 3.1 Différé (recommandé, mais pas imposé)
 
 - `JobScheduler` (ou WorkManager) périodique, minimum Android 15 min.
 - Une requête légère pour l'app (broker `/pull` ou topic agrégé), pas une par
@@ -46,7 +46,7 @@ l'app est ouverte**.
   4. s'arrête.
 - Pas de notification permanente, pas de service foreground.
 - Contraintes : réseau disponible, batterie pas faible, pas de WiFi-only par
-  défaut.
+  défaut. Rien n’est planifié tant que l’utilisateur n’a pas choisi un mode.
 - Doze peut décaler de plusieurs heures : à afficher dans l'UI.
 - Reboot : `BOOT_COMPLETED` reprogramme le job.
 
@@ -102,14 +102,17 @@ l'app est ouverte**.
    Avertissement batterie pour le mode socket.
 
 Afficher : dernier réveil, dernière synchro, données du mois, fournisseur actif,
-bouton « Tester ». Migration : ancien `pushEnabled=1` → Différées, `0` → Off.
+bouton « Tester ». Aucune présélection : `notif.mode` reste `unset` tant que
+l’utilisateur n’a pas choisi. Migration : l’ancien `pushEnabled` n’est pas
+converti automatiquement ; l’ancienne veille est arrêtée et l’utilisateur choisit
+une fois.
 
 ## 7. Plan de mise en œuvre
 
 | Phase | Contenu | Durée |
 |---|---|---|
 | P0 | Mesurer l'existant (`batterystats`, requêtes, Doze) | 0,5 j |
-| P1 | Remplacer le service 5 s par JobScheduler différé + réglages + défaut Différées | 3 j |
+| P1 | Remplacer le service 5 s par JobScheduler + réglages, sans présélection | 3 j |
 | P2 | Sync courte en arrière-plan (worker qui démarre, merge, stop) | 3 j |
 | P3 | UnifiedPush/ntfy immédiat sans Google | 3 j |
 | P4 | FCM optionnel + `/push` + `/config` | 2 j |
@@ -147,20 +150,24 @@ lancement pour une installation existante), dans une feuille non bloquante :
 > Comment veux-tu être prévenu des changements ?
 >
 > ○ Désactivé — rien en arrière-plan
-> ● Différé (recommandé) — vérification toutes les 15 min, sans Google
+> ○ Différé (recommandé) — vérification toutes les 15 min, sans Google
 > ○ Immédiat — sans Google (UnifiedPush) / avec Google (FCM)
 >
 > [Plus tard] [Activer]
 
-- « Différé » est présélectionné.
-- « Plus tard » garde Différé et marque la proposition comme vue.
-- Fermer la feuille (Échap/appui à côté) fait la même chose : **pas de rappel
-  bloquant**.
+- **Aucune option n’est présélectionnée** : les trois sont vides au départ.
+- « Activer » reste désactivé tant que l’utilisateur n’a pas choisi.
+- « Plus tard » ou fermer la feuille marque la proposition comme vue, laisse
+  `notif.mode=unset` et **ne planifie aucun travail en arrière-plan**.
+- L’app reste utilisable : elle se synchronise à l’ouverture, comme en mode
+  Désactivé, mais l’UI indique « Notifications non configurées ».
 - Le flag `notif.onboardingV1=1` est écrit dès l’ouverture ; aucune réapparition
-  au prochain lancement, même si l’utilisateur n’a rien changé.
+  au prochain lancement, même si l’utilisateur n’a rien choisi.
 - Si le fournisseur immédiat n’est pas disponible (pas de distributor, pas de
   Play Services), l’option est grisée avec une explication ; on ne repose pas la
   question plus tard.
+- Un mode explicitement choisi plus tard dans Réglages s’applique immédiatement ;
+  l’absence de choix n’est jamais traitée comme « Différé » silencieusement.
 
 ### Ensuite
 
@@ -175,4 +182,6 @@ arrière-plan** :
 - bouton « Modifier le fournisseur ».
 
 Aucun autre écran ne redemande le mode. Une mise à jour de l’app ne le repropose
-pas : seul `notif.onboardingV1` absent déclenche la feuille.
+pas : seul `notif.onboardingV1` absent déclenche la feuille. Tant que
+`notif.mode=unset`, Réglages affiche « Choisir un mode » et aucun job n’est
+programmé.
