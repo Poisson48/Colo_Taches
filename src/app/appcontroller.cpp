@@ -352,17 +352,13 @@ bool AppController::init() {
         ? QString::fromStdString(*iceSetting).split(QLatin1Char(','), Qt::SkipEmptyParts)
         : defaultIceServers().split(QLatin1Char('\n'), Qt::SkipEmptyParts));
 
-    auto syncModeSetting = m_db.getSetting("syncMode");
-    m_syncMode = syncModeSetting ? std::stoi(*syncModeSetting) : 2;
-    if (m_syncMode < 0 || m_syncMode > 2) m_syncMode = 2;
-    if (!m_db.getSetting("syncModeV2Migrated")) {
-        m_syncMode = 2;
-        m_db.setSetting("syncMode", "2");
-        m_db.setSetting("syncModeV2Migrated", "1");
+    // Synchronisation serveur uniquement ; migration unique des anciens modes.
+    m_syncMode = 0;
+    if (!m_db.getSetting("syncModeServerOnlyMigrated")) {
+        m_db.setSetting("syncMode", "0");
+        m_db.setSetting("syncModeServerOnlyMigrated", "1");
     }
-    m_transport.setMode(m_syncMode == 0 ? net::HybridTransport::Mode::RelayOnly
-                       : m_syncMode == 1 ? net::HybridTransport::Mode::P2POnly
-                                         : net::HybridTransport::Mode::Hybrid);
+    m_transport.setMode(net::HybridTransport::Mode::RelayOnly);
 
     // --- Wire SyncEngine ---
     m_syncEngine.init(&m_db, &m_transport, m_deviceId, m_displayName);
@@ -1702,7 +1698,8 @@ void AppController::setIceServers(const QString &text)
 
 void AppController::setSyncMode(int mode)
 {
-    if (mode < 0 || mode > 2 || mode == m_syncMode)
+    mode = 0; // P2P retiré du produit : seul le relais est exposé.
+    if (mode == m_syncMode)
         return;
     m_syncMode = mode;
     m_db.setSetting("syncMode", std::to_string(mode));

@@ -940,7 +940,7 @@ Item {
         onAccepted: AppController.leaveList(leaveDialog.listId)
     }
 
-    // --- Synchronisation : relais Nostr + serveur P2P ---
+    // --- Synchronisation : relais Nostr chiffré (serveur uniquement) ---
 
     ColoDialog {
         id: syncDialog
@@ -952,29 +952,9 @@ Item {
             wrapMode: Text.WordWrap
             color: Theme.textDim
             font.pixelSize: 13
-            text: "Mode de synchronisation entre appareils."
-        }
-
-        ComboBox {
-            id: syncModeBox
-            Layout.fillWidth: true
-            model: [
-                "Relais seul",
-                "P2P seul (expérimental)",
-                "Hybride (recommandé)"
-            ]
-            font.pixelSize: 14
-            palette.text: Theme.text
-        }
-
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.textDim
-            font.pixelSize: 12
-            visible: syncModeBox.currentIndex === 1
-            text: "⚠ P2P seul : les appareils doivent être ouverts en même temps. "
-                  + "Aucune récupération par le relais si un pair est hors ligne."
+            text: "Synchronisation via le relais chiffré Colo. "
+                  + "Aucun P2P, aucun TURN : le relais conserve les changements "
+                  + "jusqu'à ce que tous les appareils les aient reçus."
         }
 
         Label {
@@ -982,17 +962,13 @@ Item {
             wrapMode: Text.WordWrap
             color: Theme.textDim
             font.pixelSize: 13
-            visible: syncModeBox.currentIndex !== 1
             text: "Relais Nostr (wss://…), une URL par ligne."
         }
 
         ScrollView {
             Layout.fillWidth: true
-            Layout.preferredHeight: syncModeBox.currentIndex !== 1
-                                    ? Math.min(relayField.implicitHeight + 16, 160)
-                                    : 0
+            Layout.preferredHeight: Math.min(relayField.implicitHeight + 16, 160)
             clip: true
-            visible: syncModeBox.currentIndex !== 1
 
             TextArea {
                 id: relayField
@@ -1011,101 +987,12 @@ Item {
             }
         }
 
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.textDim
-            font.pixelSize: 13
-            visible: syncModeBox.currentIndex !== 0
-            text: "Serveur P2P (URL)"
-        }
-
-        ColoTextField {
-            id: syncP2pField
-            Layout.fillWidth: true
-            visible: syncModeBox.currentIndex !== 0
-            placeholderText: AppController.defaultP2pServerUrl()
-        }
-
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.textDim
-            font.pixelSize: 12
-            visible: syncModeBox.currentIndex !== 0
-            text: "Laisse vide pour le serveur Colo par défaut. "
-                  + "Un serveur self-hosté doit exposer /signal et /turn-credentials."
-        }
-
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.textDim
-            font.pixelSize: 13
-            visible: syncModeBox.currentIndex !== 0
-            text: "Signalisation WebSocket (avancé)"
-        }
-
-        ColoTextField {
-            id: syncSignalingField
-            Layout.fillWidth: true
-            visible: syncModeBox.currentIndex !== 0
-            placeholderText: AppController.defaultSignalingUrl()
-        }
-
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.textDim
-            font.pixelSize: 13
-            visible: syncModeBox.currentIndex !== 0
-            text: "Serveurs ICE (STUN/TURN), un par ligne"
-        }
-
-        ScrollView {
-            Layout.fillWidth: true
-            Layout.preferredHeight: syncModeBox.currentIndex !== 0
-                                    ? Math.min(iceField.implicitHeight + 16, 120)
-                                    : 0
-            clip: true
-            visible: syncModeBox.currentIndex !== 0
-
-            TextArea {
-                id: iceField
-                width: parent.width
-                wrapMode: TextArea.Wrap
-                color: Theme.text
-                font.pixelSize: 13
-                font.family: "monospace"
-                selectByMouse: true
-                placeholderText: AppController.defaultIceServers()
-                background: Rectangle {
-                    radius: 12
-                    color: Theme.surfaceHigh
-                    border.color: Theme.outline
-                }
-            }
-        }
-
         onOpened: {
-            syncModeBox.currentIndex = Math.max(0, Math.min(2, AppController.syncMode))
             relayField.text = AppController.relayUrls
-            syncP2pField.text = AppController.p2pServerUrl
-            syncSignalingField.text = AppController.signalingUrl
-            iceField.text = AppController.iceServers
         }
         onAccepted: {
-            if (syncModeBox.currentIndex !== 1)
-                AppController.setRelayUrls(relayField.text)
-            if (syncModeBox.currentIndex !== 0) {
-                const baseChanged = syncP2pField.text.trim() !== AppController.p2pServerUrl
-                if (baseChanged)
-                    AppController.setP2pServerUrl(syncP2pField.text)
-                else
-                    AppController.setSignalingUrl(syncSignalingField.text)
-                AppController.setIceServers(iceField.text)
-            }
-            AppController.setSyncMode(syncModeBox.currentIndex)
+            AppController.setRelayUrls(relayField.text)
+            AppController.setSyncMode(0)
         }
     }
 

@@ -75,12 +75,14 @@ void HybridTransport::setRelays(const QList<QUrl>& urls)
 
 void HybridTransport::setSignalingUrl(const QUrl& url)
 {
-    m_p2p.setSignalingUrl(url);
+    if (m_mode != Mode::RelayOnly)
+        m_p2p.setSignalingUrl(url);
 }
 
 void HybridTransport::setP2pServerUrl(const QUrl& url)
 {
-    m_p2p.setP2pServerUrl(url);
+    if (m_mode != Mode::RelayOnly)
+        m_p2p.setP2pServerUrl(url);
 }
 
 void HybridTransport::setAppId(const QString& appId)
@@ -90,7 +92,8 @@ void HybridTransport::setAppId(const QString& appId)
 
 void HybridTransport::setIceServers(const QStringList& urls)
 {
-    m_p2p.setIceServers(urls);
+    if (m_mode != Mode::RelayOnly)
+        m_p2p.setIceServers(urls);
 }
 
 void HybridTransport::setDeviceId(const QString& deviceId)

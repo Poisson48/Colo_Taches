@@ -1,5 +1,10 @@
 # Colo Sync — transport hybride (relais + P2P)
 
+> **Décision 2026-11-10 : le P2P est retiré du produit.** Ce document est
+> historique. L’architecture retenue est un relais serveur chiffré, décrite dans
+> [SYNC-SERVER.md](SYNC-SERVER.md). Plus de TURN, plus de WebRTC, plus de photos HD
+> synchronisées.
+
 > État : v0.32.0 (Course) / v0.8.0 (Tâches). Ce document décrit le fonctionnement
 > cible ; il remplace `docs/P2P-MIGRATION.md` comme référence d’architecture.
 

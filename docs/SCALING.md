@@ -1,4 +1,9 @@
-# Dimensionnement : combien d’appareils, de listes, de ports TURN ?
+# Dimensionnement : combien d’appareils, de listes, de données ?
+
+> **Décision 2026-11-10** : le P2P/TURN est retiré. Les calculs de maillage et les
+> options A/B/C ci-dessous sont historiques. Pour 1 000 utilisateurs, voir
+> [SYNC-SERVER.md](SYNC-SERVER.md) : relais serveur chiffré, watermarks, snapshot
+> à la demande, pas de ports TURN.
 
 ## Ce qui compte n’est pas le nombre d’appareils
 

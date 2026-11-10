@@ -316,7 +316,7 @@ private:
     QString          m_displayName;
     bool             m_hasDisplayName = false;
     std::string      m_openListId;   // liste actuellement chargée dans m_itemModel
-    int              m_syncMode = 2; // 0 relais seul, 1 P2P seul, 2 hybride
+    int              m_syncMode = 0; // relais seul (P2P retiré)
 };
 
 } // namespace app

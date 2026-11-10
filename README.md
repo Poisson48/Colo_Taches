@@ -40,12 +40,12 @@ le QR code (ou le lien) aux autres — les modifications s'y synchronisent en di
 
 ### Architecture
 - **Copie locale complète** : chaque appareil stocke toutes les tâches et l'historique en SQLite.
-- **Sync chiffrée E2E, hybride** : relais Nostr privé pour le stockage durable + transport P2P WebRTC (signaling/TURN) pour la vitesse. Le relais et le serveur P2P sont deux URL configurables ; les anciens relais publics restent en transition. Aucune donnée de liste n'est stockée sur le signaling.
+- **Sync chiffrée E2E, serveur uniquement** : un relais Nostr privé (configurable, self-host possible) assure le stockage durable et le fan-out. **Pas de P2P, pas de TURN, pas de WebRTC** : un seul chemin. Les anciens relais publics restent en transition.
 - **Sans conflits** : CRDT maison avec Last-Writer-Wins par champ (nom, catégorie, coché, photo…) et horloges de Lamport. Les modifications simultanées convergent identiquement sur tous les appareils, sans intervention.
 - **Appairage simple** : créez une liste, puis soit l'autre appareil **scanne le QR code**, soit vous lui **envoyez le lien** `colotaches://` (WhatsApp, SMS…) — un appui dessus ouvre l'app et rejoint la liste. Le lien porte la clé : ne le publiez pas.
 - **Plusieurs listes, groupées** : autant de listes qu'il y a de contextes, rangées en **groupes** nommés (Maison, Boulot…). Chaque liste indique **avec qui elle est partagée**.
 - **Hors ligne d'abord** : les modifications s'ajoutent immédiatement localement dans une file d'attente. Au retour du réseau, la sync reprend automatiquement, et l'app **confirme** quand tout est parti. Aucune modification n'est supprimée sans accusé durable du relais.
-- **Photos** : vignette légère sur le relais, **haute résolution en P2P** à la demande (≤ 2 Mo).
+- **Photos** : vignette légère sur le relais. Pas de transfert HD.
 
 ### Au quotidien
 - **Étapes** : découpez une tâche (« Repeindre le volet » → démonter, poncer, repeindre) en étapes cochables. La liste affiche la progression (« 2/5 étapes »), chacun voit où en est le travail. Supprimer la tâche emporte ses étapes.
@@ -103,14 +103,14 @@ dans l'app avant une mise à jour).
 Fork de [Colo_Course](https://github.com/Poisson48/Colo_Course) (liste de courses partagée), adapté au partage de tâches, avec deux nouveautés : les **étapes** et les **photos** de tâches. Même architecture éprouvée : tests CRDT complets, sync relais, chiffrement E2E, appairage par QR.
 
 Spécification technique (CRDT, protocole relais, format données) : [docs/SPEC.md](docs/SPEC.md)  
-Transport hybride, P2P, TURN et self-host : [docs/SYNC-HYBRID.md](docs/SYNC-HYBRID.md)
+Architecture de synchronisation serveur, accusés et self-host : [docs/SYNC-SERVER.md](docs/SYNC-SERVER.md)
 
 ## Limitations connues
 
 - **Notifications hors app** : l'app doit être ouverte (ou en premier plan sur mobile) pour recevoir les changements en temps réel. Pas de push notification Firebase ou FCM par choix architectural (pas de serveur tiers, de compte requis).
 - **Révocation d'un membre** : non supportée en v1. Pour exclure quelqu'un d'une liste, recréez-la et repartagez la clé avec les nouveaux membres uniquement.
-- **Photos** : vignette ~30 Ko durable ; la HD est un bonus P2P, pas une garantie si aucun pair ne la conserve.
-- **4G / NAT** : le P2P 4G nécessite TURN ; sans TURN joignable, retour au relais (sans perte).
+- **Pas de photos HD** : seules les vignettes sont synchronisées.
+- **Perte si tous les appareils disparaissent** : le relais supprime les deltas acquittés ; sans aucun appareil pour renvoyer un snapshot, une liste peut être perdue. Accepté pour des listes de tâches.
 - **Nettoyage des tombstones** : les éléments supprimés sont purgés localement après 30 jours sans modification. Un pair très en retard peut théoriquement ressusciter un item purgé (très rare, accepté).
 
 ## Licence
