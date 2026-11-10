@@ -75,7 +75,7 @@ pair possède l’état.
 ## 6. TURN
 
 TURN est obligatoire pour la 4G. coturn écoute 3479 (UDP/TCP) et 5350 (TLS),
-avec une plage de relais 50000–50100/UDP. L’app récupère des credentials
+avec une plage de relais 50000–50019/UDP. L’app récupère des credentials
 éphémères via `/turn-credentials` ; le secret reste sur le serveur.
 
 Ports à ouvrir sur la box/routeur :
@@ -84,7 +84,7 @@ Ports à ouvrir sur la box/routeur :
 |---|---|
 | 3479 | UDP + TCP |
 | 5350 | TCP |
-| 50000–50100 | UDP |
+| 50000–50019 | UDP |
 
 Le 3478 est réservé au STUN meownopoly du serveur Colo ; ne pas y toucher.
 
