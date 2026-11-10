@@ -3,6 +3,9 @@
 #ifdef Q_OS_ANDROID
 #  include <QCoreApplication>
 #  include <QJniObject>
+#  include <QJniEnvironment>
+#  include <QMetaObject>
+#  include "appcontroller.h"
 #endif
 
 namespace app {
@@ -170,10 +173,10 @@ void platformKeepScreenOn(bool) {}
 
 bool platformAddCalendarEvent(const QString&, const QString&, qint64) { return false; }
 
-#endif
-
 void platformConfigureNotifications(const QString &, const QString &, int,
                                      const QString &, const QStringList &,
                                      const QString &) {}
+
+#endif
 
 } // namespace app
