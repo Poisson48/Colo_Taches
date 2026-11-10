@@ -148,6 +148,9 @@ std::optional<Payload> parsePayload(const std::string& jsonStr) {
             return std::nullopt;
         if (j.contains("by") && j["by"].is_string())
             p.by = j["by"].get<std::string>();
+        if (j.contains("variant") && j["variant"].is_string()) {
+            if (j["variant"].get<std::string>() == "hd") p.imageVariant = "hd";
+        }
         return p;
     }
 
@@ -272,7 +275,8 @@ static json verToJson(const Ver& ver) {
 std::string serializeImagePayload(const std::string& listId,
                                   const std::string& by,
                                   const std::string& sha,
-                                  const std::vector<uint8_t>& data) {
+                                  const std::vector<uint8_t>& data,
+                                  const std::string& variant) {
     json j;
     j["v"]    = 1;
     j["t"]    = "img";
@@ -281,12 +285,15 @@ std::string serializeImagePayload(const std::string& listId,
         j["by"] = by;
     j["sha"]  = sha;
     j["data"] = b64Encode(data);
+    if (variant == "hd")
+        j["variant"] = "hd";
     return j.dump();
 }
 
 std::string serializePayload(const Payload& p) {
     if (p.type == Payload::Type::image)
-        return serializeImagePayload(p.listId, p.by, p.imageSha, p.imageData);
+        return serializeImagePayload(p.listId, p.by, p.imageSha, p.imageData,
+                                     p.imageVariant);
     json j;
     j["v"]    = 1;
     j["t"]    = (p.type == Payload::Type::delta) ? "delta" : "snap";

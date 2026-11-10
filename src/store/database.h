@@ -112,6 +112,9 @@ public:
     // Stocke un blob JPEG sous son sha256 hex. Idempotent (le contenu ne change pas
     // pour un sha donné) : ré-insérer le même blob est sans effet.
     bool putImage(const std::string& sha, const QByteArray& data);
+    bool putImageHd(const std::string& sha, const QByteArray& data);
+    QByteArray getImageHd(const std::string& sha);
+    bool hasImageHd(const std::string& sha);
     // Blob d'une image, ou tableau vide si absente (pas encore reçue du relais).
     QByteArray getImage(const std::string& sha);
     bool hasImage(const std::string& sha);

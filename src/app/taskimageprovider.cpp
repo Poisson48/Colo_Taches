@@ -21,7 +21,11 @@ QImage TaskImageProvider::requestImage(const QString& id, QSize* size,
         return {};
 
     const QString sha = id.section(QLatin1Char('?'), 0, 0);
-    const QByteArray blob = db.getImage(sha.toStdString());
+    const bool wantHd = id.section(QLatin1Char('?'), 1, 1).contains(QStringLiteral("hd=1"));
+    QByteArray blob = wantHd ? db.getImageHd(sha.toStdString())
+                             : db.getImage(sha.toStdString());
+    if (blob.isEmpty())
+        blob = db.getImage(sha.toStdString());
 
     QImage img;
     if (!blob.isEmpty())

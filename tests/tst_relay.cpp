@@ -513,7 +513,7 @@ private slots:
         pool.setRelays({relay.url()});
         QVERIFY(!pool.isOnline());
 
-        QSignalSpy onlineSpy(&pool, &net::RelayPool::onlineChanged);
+        QSignalSpy onlineSpy(&pool, &net::SyncTransport::onlineChanged);
 
         pool.connectAll();
         QVERIFY(onlineSpy.wait(2000));

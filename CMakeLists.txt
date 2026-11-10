@@ -40,6 +40,35 @@ FetchContent_Declare(zxing
 )
 FetchContent_MakeAvailable(zxing)
 
+# libdatachannel : data channels WebRTC pour la synchronisation P2P.
+# Statique, DTLS via OpenSSL (Android : fourni par android_openssl).
+include(FetchContent)
+
+if(ANDROID)
+    FetchContent_Declare(android_openssl
+        GIT_REPOSITORY https://github.com/KDAB/android_openssl.git
+        GIT_TAG        master
+    )
+    FetchContent_MakeAvailable(android_openssl)
+    include(${android_openssl_SOURCE_DIR}/android_openssl.cmake)
+
+    # FindOpenSSL (utilisé par libdatachannel) ne connaît pas les variables de
+    # KDAB : on les lui fournit explicitement avant son configure.
+    set(OPENSSL_INCLUDE_DIR "${OPENSSL_INCLUDE_DIR}")
+    set(OPENSSL_CRYPTO_LIBRARY "${OPENSSL_LIB_DIR}/${libcrypto}")
+    set(OPENSSL_SSL_LIBRARY "${OPENSSL_LIB_DIR}/${libssl}")
+endif()
+
+set(NO_MEDIA     ON CACHE BOOL "" FORCE)
+set(NO_WEBSOCKET ON CACHE BOOL "" FORCE)
+set(NO_EXAMPLES  ON CACHE BOOL "" FORCE)
+set(NO_TESTS     ON CACHE BOOL "" FORCE)
+FetchContent_Declare(libdatachannel
+    GIT_REPOSITORY https://github.com/paullouisageneau/libdatachannel.git
+    GIT_TAG        v0.22.5
+)
+FetchContent_MakeAvailable(libdatachannel)
+
 add_subdirectory(src)
 
 # Tests run on the host only.

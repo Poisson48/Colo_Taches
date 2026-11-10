@@ -117,6 +117,7 @@ bool Database::createSchema()
             "CREATE TABLE IF NOT EXISTS images ("
             "  sha TEXT PRIMARY KEY,"
             "  data BLOB,"
+            "  hd_data BLOB,"
             "  created INT"
             ")"),
         QStringLiteral(
@@ -301,6 +302,21 @@ bool Database::migrateSchema()
         if (!q.exec(QStringLiteral("UPDATE lists SET list_order = created"
                                    " WHERE list_order IS NULL OR list_order = 0"))) {
             qWarning() << "migrateSchema: backfill list_order failed:"
+                       << q.lastError().text();
+            return false;
+        }
+    }
+
+    QStringList imageCols;
+    if (!q.exec(QStringLiteral("PRAGMA table_info(images)"))) {
+        qWarning() << "migrateSchema: PRAGMA images failed:" << q.lastError().text();
+        return false;
+    }
+    while (q.next())
+        imageCols << q.value(1).toString();
+    if (!imageCols.contains(QStringLiteral("hd_data"))) {
+        if (!q.exec(QStringLiteral("ALTER TABLE images ADD COLUMN hd_data BLOB"))) {
+            qWarning() << "migrateSchema: ADD COLUMN hd_data failed:"
                        << q.lastError().text();
             return false;
         }
@@ -912,7 +928,8 @@ bool Database::putImage(const std::string& sha, const QByteArray& data)
     if (sha.empty() || data.isEmpty()) return false;
     QSqlQuery q(m_db);
     q.prepare(QStringLiteral(
-        "INSERT OR IGNORE INTO images (sha, data, created) VALUES (?, ?, ?)"));
+        "INSERT INTO images (sha, data, created) VALUES (?, ?, ?)"
+        " ON CONFLICT(sha) DO UPDATE SET data = excluded.data"));
     q.addBindValue(qs(sha));
     q.addBindValue(data);
     q.addBindValue(ll(QDateTime::currentMSecsSinceEpoch()));
@@ -921,6 +938,43 @@ bool Database::putImage(const std::string& sha, const QByteArray& data)
         return false;
     }
     return true;
+}
+
+bool Database::putImageHd(const std::string& sha, const QByteArray& data)
+{
+    if (sha.empty() || data.isEmpty()) return false;
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral(
+        "INSERT INTO images (sha, data, hd_data, created) VALUES (?, ?, ?, ?)"
+        " ON CONFLICT(sha) DO UPDATE SET hd_data = excluded.hd_data"));
+    q.addBindValue(qs(sha));
+    q.addBindValue(QByteArray());
+    q.addBindValue(data);
+    q.addBindValue(ll(QDateTime::currentMSecsSinceEpoch()));
+    if (!q.exec()) {
+        qWarning() << "putImageHd error:" << q.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+QByteArray Database::getImageHd(const std::string& sha)
+{
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("SELECT hd_data FROM images WHERE sha = ?"));
+    q.addBindValue(qs(sha));
+    if (q.exec() && q.next())
+        return q.value(0).toByteArray();
+    return {};
+}
+
+bool Database::hasImageHd(const std::string& sha)
+{
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("SELECT 1 FROM images WHERE sha = ? AND hd_data IS NOT NULL"
+                             " AND length(hd_data) > 0"));
+    q.addBindValue(qs(sha));
+    return q.exec() && q.next();
 }
 
 QByteArray Database::getImage(const std::string& sha)

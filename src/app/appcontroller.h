@@ -10,7 +10,7 @@
 #include "../store/database.h"
 #include "../core/types.h"
 #include "../core/pairing.h"
-#include "../net/relaypool.h"
+#include "../net/hybridtransport.h"
 #include "itemmodel.h"
 #include "syncengine.h"
 
@@ -104,10 +104,18 @@ class AppController : public QObject {
     // demande. Sans ça, tout le monde s'appelle « Moi » et les notifications
     // deviennent illisibles (« 2 articles modifiés par Moi »).
     Q_PROPERTY(bool hasDisplayName READ hasDisplayName NOTIFY displayNameChanged)
+    // Synchronisation : relais Nostr et serveur P2P sont deux réglages distincts.
+    Q_PROPERTY(int syncMode READ syncMode NOTIFY syncModeChanged)
+    Q_PROPERTY(QString p2pServerUrl READ p2pServerUrl NOTIFY syncModeChanged)
+    Q_PROPERTY(QString signalingUrl READ signalingUrl NOTIFY syncModeChanged)
+    Q_PROPERTY(QString iceServers READ iceServers NOTIFY syncModeChanged)
 
 public:
     explicit AppController(QObject *parent = nullptr);
     ~AppController() override;
+
+    // Arrêt ordonné (transport puis modèles).
+    void shutdown();
 
     // Initialize: open DB, generate/load deviceId + displayName.
     bool init();
@@ -126,6 +134,10 @@ public:
     QString deviceId() const;
     QString displayName() const;
     bool    hasDisplayName() const;
+    int     syncMode() const { return m_syncMode; }
+    QString p2pServerUrl();
+    QString signalingUrl();
+    QString iceServers();
 
     store::Database &db() { return m_db; }
 
@@ -160,6 +172,20 @@ public slots:
     void removeTaskImage(const QString &itemId, const QString &sha);
     // Chemin temporaire pour une capture caméra (fichier local, prêt pour setTaskImage).
     Q_INVOKABLE QString tempPhotoPath() const;
+    // Demande la HD d'une photo à un pair P2P (best-effort).
+    Q_INVOKABLE void requestHd(const QString &sha);
+
+    // --- Synchronisation ---
+    Q_INVOKABLE void setSyncMode(int mode);
+    Q_INVOKABLE void setP2pServerUrl(const QString &url);
+    Q_INVOKABLE QString defaultP2pServerUrl() const;
+    Q_INVOKABLE void setSignalingUrl(const QString &url);
+    Q_INVOKABLE QString defaultSignalingUrl() const;
+    Q_INVOKABLE void setIceServers(const QString &text);
+    Q_INVOKABLE QString defaultIceServers() const;
+    Q_INVOKABLE void setRelayUrls(const QString &text);
+    Q_INVOKABLE QString relayUrls();
+    Q_INVOKABLE QString defaultRelayUrls() const;
 
     // --- Échéance / agenda ---
     // Propose l'événement à l'agenda : Android ouvre l'app d'agenda pré-remplie
@@ -249,6 +275,7 @@ signals:
     void favoritesChanged();
     void customAislesChanged();
     void displayNameChanged();
+    void syncModeChanged();
     // Emitted when QML should push the item page.
     void listOpened(const QString &listId, const QString &title);
     // Titre changé (ici ou par un autre appareil) : l'en-tête de la liste ouverte suit.
@@ -280,7 +307,7 @@ private:
     // Étapes de la tâche ouverte : un second modèle sur la même liste, filtré par
     // tâche parente. Enregistré auprès du SyncEngine le temps que la page est ouverte.
     ItemModel        m_stepModel;
-    net::RelayPool   m_relayPool;
+    net::HybridTransport m_transport;
     SyncEngine       m_syncEngine;
     bool             m_online = false;
     int              m_pendingChanges = 0;
@@ -289,6 +316,7 @@ private:
     QString          m_displayName;
     bool             m_hasDisplayName = false;
     std::string      m_openListId;   // liste actuellement chargée dans m_itemModel
+    int              m_syncMode = 2; // 0 relais seul, 1 P2P seul, 2 hybride
 };
 
 } // namespace app
