@@ -135,3 +135,44 @@ P3 peut suivre ; P4 est optionnel.
 - Pas de polling 5 s.
 - Pas d'exemption batterie demandée par défaut.
 - Pas de contenu de liste dans une notification.
+
+## 10. Proposition unique, puis réglages
+
+### Première fois
+
+Le choix est proposé **une seule fois**, après le choix du nom (ou au premier
+lancement pour une installation existante), dans une feuille non bloquante :
+
+> **Notifications et arrière-plan**
+> Comment veux-tu être prévenu des changements ?
+>
+> ○ Désactivé — rien en arrière-plan
+> ● Différé (recommandé) — vérification toutes les 15 min, sans Google
+> ○ Immédiat — sans Google (UnifiedPush) / avec Google (FCM)
+>
+> [Plus tard] [Activer]
+
+- « Différé » est présélectionné.
+- « Plus tard » garde Différé et marque la proposition comme vue.
+- Fermer la feuille (Échap/appui à côté) fait la même chose : **pas de rappel
+  bloquant**.
+- Le flag `notif.onboardingV1=1` est écrit dès l’ouverture ; aucune réapparition
+  au prochain lancement, même si l’utilisateur n’a rien changé.
+- Si le fournisseur immédiat n’est pas disponible (pas de distributor, pas de
+  Play Services), l’option est grisée avec une explication ; on ne repose pas la
+  question plus tard.
+
+### Ensuite
+
+Le même choix est toujours accessible dans **Réglages → Notifications et
+arrière-plan** :
+
+- mode ;
+- intervalle 15/30/60 min ;
+- fournisseur immédiat (Auto / Sans Google / Google) ;
+- état réel : dernier réveil, dernière synchro, données du mois ;
+- bouton « Tester » ;
+- bouton « Modifier le fournisseur ».
+
+Aucun autre écran ne redemande le mode. Une mise à jour de l’app ne le repropose
+pas : seul `notif.onboardingV1` absent déclenche la feuille.
