@@ -77,6 +77,10 @@ public:
     // Called when a new list is joined (subscribe without since).
     void onListJoined(const std::string& listId);
 
+    // Re-publie une fois chaque liste vers les relais configurés (migration
+    // depuis les anciens relais publics). Idempotent par liste.
+    void rehostListsOnce();
+
     // Subscribe all known lists (called after init, or after reconnect).
     void subscribeAllLists(int64_t since = 0);
 

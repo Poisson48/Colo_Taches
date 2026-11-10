@@ -569,6 +569,31 @@ void SyncEngine::onRelayOnline(bool online)
 
     // (Re)subscribe all known lists.
     subscribeAllLists();
+
+    // Migration : s'assurer que chaque liste existe sur les relais actuels
+    // (colo-apps), même si elle n'a connu que les anciens relais publics.
+    rehostListsOnce();
+}
+
+void SyncEngine::rehostListsOnce()
+{
+    if (!m_db || !m_pool) return;
+    for (const auto& meta : m_db->getLists()) {
+        const std::string key = "rehostV2." + meta.listId;
+        if (m_db->getSetting(key).has_value())
+            continue;
+        const std::string json = snapPayloadJson(meta.listId);
+        if (json.empty())
+            continue;
+        const std::string eventId = buildAndPublish(meta.listId, json);
+        if (eventId.empty())
+            continue;
+        for (const std::string& sha : m_db->imagesReferenced(meta.listId))
+            publishImage(meta.listId, sha);
+        resetDeltaCounter(meta.listId);
+        m_db->setSetting(key, "1");
+        qInfo() << "[SyncEngine] rehosted list" << QString::fromStdString(meta.listId);
+    }
 }
 
 void SyncEngine::subscribeAllLists(int64_t since)
