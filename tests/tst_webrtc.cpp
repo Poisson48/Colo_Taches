@@ -11,6 +11,7 @@
 #include <QJsonArray>
 #include <QHash>
 #include <QSet>
+#include <memory>
 
 #include "../src/net/webrtctransport.h"
 
@@ -137,8 +138,18 @@ private slots:
         qRegisterMetaType<net::AckKind>("net::AckKind");
         qRegisterMetaType<net::NostrEvent>("net::NostrEvent");
 
-        FakeSignaling signaling;
-        QVERIFY(signaling.listen());
+        // Par défaut, signaling local factice (CI, hors réseau). Avec
+        // COLO_SIGNAL_URL=wss://… on teste le vrai serveur public.
+        const QString external = qEnvironmentVariable("COLO_SIGNAL_URL");
+        std::unique_ptr<FakeSignaling> fake;
+        QUrl signalUrl;
+        if (external.isEmpty()) {
+            fake = std::make_unique<FakeSignaling>();
+            QVERIFY(fake->listen());
+            signalUrl = fake->url();
+        } else {
+            signalUrl = QUrl(external);
+        }
 
         const QString channel = QStringLiteral("0123456789abcdef0123456789abcdef");
 
@@ -146,8 +157,8 @@ private slots:
         WebRTCTransport b;
         a.setDeviceId(QStringLiteral("device-a"));
         b.setDeviceId(QStringLiteral("device-b"));
-        a.setSignalingUrl(signaling.url());
-        b.setSignalingUrl(signaling.url());
+        a.setSignalingUrl(signalUrl);
+        b.setSignalingUrl(signalUrl);
         a.setIceServers({});
         b.setIceServers({});
 
