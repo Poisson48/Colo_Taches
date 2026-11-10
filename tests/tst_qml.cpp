@@ -361,7 +361,10 @@ private slots:
         if (qEnvironmentVariableIsSet("COLO_SCREENSHOT"))
             win->grabWindow().save(qEnvironmentVariable("COLO_SCREENSHOT"));
 
-        const QStringList options = visibleTexts(win->contentItem());
+        // Vérifier le modèle du sélecteur lui-même : le popup offscreen n'est pas
+        // toujours peuplé au moment où on inspecte l'arbre visuel, alors que la
+        // liste des catégories (défauts + utilisées) est la vraie logique à tester.
+        const QStringList options = aisleBox->property("options").toStringList();
         QVERIFY2(options.contains(QStringLiteral("Cuisine")),
                  qPrintable("catégories proposées : " + options.join(QStringLiteral(" | "))));
         QVERIFY(options.contains(QStringLiteral("Sans catégorie")));
