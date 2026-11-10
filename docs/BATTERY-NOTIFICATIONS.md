@@ -185,3 +185,22 @@ Aucun autre écran ne redemande le mode. Une mise à jour de l’app ne le repro
 pas : seul `notif.onboardingV1` absent déclenche la feuille. Tant que
 `notif.mode=unset`, Réglages affiche « Choisir un mode » et aucun job n’est
 programmé.
+
+## 11. État implémenté (Colo Course, 2026-11-10)
+
+- `notif.mode` = `unset|off|deferred` (le mode `immediate` est réservé et
+  actuellement désactivé dans l’UI).
+- Feuille one-shot sans présélection ; « Plus tard » laisse `unset` et ne
+  programme rien.
+- Mode différé : `JobScheduler` 15/30/60 min, `setPersisted(true)`, contrainte
+  réseau + batterie pas faible, aucune notification permanente.
+- L’ancien `PushService` 5 s n’est plus démarré par l’app ; il est arrêté dès
+  qu’un mode est appliqué.
+- Les jobs sont annulés quand l’app revient au premier plan (le WebSocket Qt
+  reprend la main).
+- L’option « Immédiat » est grisée tant que UnifiedPush/FCM ne sont pas livrés.
+- Colo Tâches : à porter dans un second temps (pas de service Android actuel).
+
+**Pas encore fait** : vrai worker de sync courte (P2), UnifiedPush (P3),
+FCM (P4). Pour l’instant le job différé **notifie** ; la synchronisation des
+données se fait à l’ouverture de l’app.
