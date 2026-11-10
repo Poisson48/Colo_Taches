@@ -204,3 +204,143 @@ programmé.
 **Pas encore fait** : vrai worker de sync courte (P2), UnifiedPush (P3),
 FCM (P4). Pour l’instant le job différé **notifie** ; la synchronisation des
 données se fait à l’ouverture de l’app.
+
+## 12. Spécification P2 — sync courte en arrière-plan
+
+Objectif : que le job différé ne se contente pas de notifier, mais merge les
+données manquantes, puis s’arrête.
+
+### Déroulé
+
+1. `JobScheduler` démarre `BackgroundSyncJob` (même process que l’app si elle
+   est vivante, sinon process court).
+2. Le job ouvre la base SQLite en WAL et prend un verrou court.
+3. Il crée un `SyncEngine` minimal (relais déjà configuré, pas de P2P) et
+   demande `catchUp` pour les listes dues.
+4. Il merge les deltas/snapshots, met à jour l’outbox et les ack.
+5. Il affiche au plus une notification locale par liste modifiée.
+6. Il ferme la base, libère le verrou, appelle `jobFinished`.
+7. Budget maximal : **20 s** de réseau, **5 s** de merge, puis arrêt.
+
+### Garde-fous
+
+- Aucun `PeerConnection`, aucun TURN, aucun signaling.
+- Pas de service foreground, pas de notification permanente.
+- Si Qt ne peut pas démarrer dans le process du job : repli notification-only.
+- Si le merge échoue : ne pas acquitter, garder l’outbox, réessayer au prochain
+  job.
+- Si l’app est au premier plan : le job est annulé, le WebSocket Qt fait le
+  travail.
+- Ne jamais lancer deux syncs simultanées : verrou `sync.lock` en base.
+
+### Tests
+
+- Doze + reboot : job reprogrammé, merge OK.
+- 20 listes, 1 000 deltas en attente : merge < 5 s, une notification groupée.
+- App tuée pendant le merge : transaction SQLite annulée, aucun ack partiel.
+- Batterie : `< 1 %/24 h` écran éteint, `< 15 Mo/mois`.
+
+## 13. Spécification P3 — UnifiedPush sans Google
+
+### Client
+
+- Ajouter une abstraction `PushProvider` : `none`, `unifiedpush`, `fcm`.
+- Enregistrer l’app auprès du distributor UnifiedPush installé.
+- Stocker l’endpoint et le topic localement ; ne jamais envoyer de contenu.
+- Si aucun distributor : masquer l’option, repli Différé.
+- Si l’utilisateur choisit Immédiat : demander l’exemption batterie uniquement
+  dans ce mode, avec explication.
+
+### Serveur
+
+- `POST /push {app, endpoint}` → envoi data-only via le distributor.
+- `/config` expose `push.unifiedpush: true` et l’endpoint public.
+- Rate-limit par endpoint ; métriques par app.
+- Aucun titre, aucune donnée de liste.
+
+### Tests
+
+- Distributor absent : option grisée, aucun crash.
+- Distributor installé : notification < 5 s app fermée, Doze inclus.
+- Self-host : ntfy comme distributor, pas de Google.
+
+## 14. Spécification P4 — FCM optionnel
+
+- Dépendance Play Services **uniquement** dans le build qui l’active.
+- `FirebaseMessagingService` : message data-only vide ; l’app lit le chiffré.
+- `google-services.json` n’est pas un secret, mais il est propre à l’instance.
+- Si Play Services absent : ne pas proposer FCM, repli UnifiedPush/Différé.
+- Serveur : `/push {app, fcmToken}` → FCM ; 202/429 ; jamais de contenu.
+- Tests : APK sans Play Services, APK avec, Doze, token renouvelé.
+
+## 15. Portage Colo Tâches
+
+- Mêmes fichiers Java (`DeferredPushJob`, `Platform`), même contrat JNI.
+- Mêmes réglages `notif.*` et même feuille one-shot.
+- Topics `colo-...` identiques au format, mais app distincte (`colotaches`).
+- Le serveur doit garder deux namespaces de métriques.
+- Tests : les deux apps sur le même téléphone, pas de collision de topics.
+
+## 16. Contrats serveur
+
+```http
+POST /push
+{ "app": "colocourse|colotaches", "topic": "...", "provider": "unifiedpush|fcm" }
+→ 202 Accepted | 429 Too Many Requests
+```
+
+- Aucun titre, aucun article, aucune clé.
+- Le serveur ne stocke que le couple `(app, topic, provider, last_seen)`.
+- `/config` :
+
+```json
+{
+  "notifications": {
+    "deferred": true,
+    "unifiedpush": true,
+    "fcm": false,
+    "maxInterval": 60
+  }
+}
+```
+
+## 17. Matrice de tests
+
+| Cas | Attendu |
+|---|---|
+| Aucun mode choisi | 0 job, 0 requête, app synchronisée à l’ouverture |
+| Désactivé | 0 job, 0 notification |
+| Différé 15 min | ≤ 96 réveils/jour, merge court, pas de notification permanente |
+| Immédiat UnifiedPush | < 5 s, pas de service permanent |
+| Immédiat FCM | < 5 s, pas de service permanent |
+| Distributor absent | option grisée, repli différé |
+| Play Services absent | FCM masqué, repli UnifiedPush/différé |
+| Doze | job décalé, pas de crash, pas de perte d’outbox |
+| Reboot | job reprogrammé |
+| App au premier plan | job annulé, WebSocket actif |
+| Deux apps | topics/métriques séparés |
+| Self-host sans Google | différé + UnifiedPush OK |
+
+## 18. Décisions figées
+
+- **Aucune présélection** du mode.
+- **Aucun job** tant que `notif.mode=unset`.
+- **Différé** par défaut *proposé*, jamais imposé.
+- **Immédiat** optionnel ; sans Google via UnifiedPush, avec Google via FCM.
+- **Pas de service Qt/WebSocket permanent** en arrière-plan.
+- **Pas de contenu de liste** dans une notification.
+- **Perte acceptée** si plus aucun appareil ne détient une liste.
+
+## 19. Definition of done par phase
+
+- P1 : one-shot sans présélection, Réglages, JobScheduler, plus de 5 s.
+- P2 : merge SQLite réel dans le job, outbox/ack corrects, tests Doze/reboot.
+- P3 : UnifiedPush de bout en bout, repli propre sans distributor.
+- P4 : FCM optionnel, APK sans Play Services fonctionnel.
+- P5 : métriques dernier réveil/données, tests OEM, doc utilisateur.
+
+## 20. État actuel
+
+- P1 : **fait** (Course v0.33.0).
+- P2/P3/P4/P5 : **à faire**.
+- Colo Tâches : **à porter**.
