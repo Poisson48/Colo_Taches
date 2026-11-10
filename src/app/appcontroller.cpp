@@ -1750,6 +1750,11 @@ bool AppController::notifOnboardingSeen()
     return m_db.getSetting("notif.onboardingV1").has_value();
 }
 
+bool AppController::notifImmediateAvailable()
+{
+    return platformFcmAvailable();
+}
+
 QString AppController::pushBaseUrl()
 {
     const auto v = m_db.getSetting("pushBaseUrl");
@@ -1822,8 +1827,13 @@ void AppController::refreshPushTopics()
         return;
     }
     if (mode == "immediate") {
-        platformConfigureNotifications(QStringLiteral("off"), notifProvider(),
-                                       notifInterval(), QString(), {}, m_deviceId);
+        QStringList topics;
+        for (const auto &meta : m_db.getLists())
+            topics.append(net::pushTopicForChannel(
+                QString::fromStdString(net::deriveChannelTag(meta.key))));
+        platformConfigureNotifications(QStringLiteral("immediate"),
+                                       QStringLiteral("fcm"),
+                                       notifInterval(), QString(), topics, m_deviceId);
         return;
     }
     QStringList topics;

@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "84946471081",
+    "project_id": "colo-course-taches",
+    "storage_bucket": "colo-course-taches.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:84946471081:android:d509baaf380c731c4941b8",
+        "android_client_info": {
+          "package_name": "org.colocourse.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDw21WsUoOJUqPoyS8w9gaVUVic0XHzgBg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:84946471081:android:3b73a99a15ed471a4941b8",
+        "android_client_info": {
+          "package_name": "org.colotaches.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDw21WsUoOJUqPoyS8w9gaVUVic0XHzgBg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

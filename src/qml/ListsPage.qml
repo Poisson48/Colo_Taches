@@ -970,7 +970,7 @@ Item {
             ButtonGroup.group: notifGroupBox
         }
         RadioButton {
-            text: "Immédiat — sans Google / avec Google (bientôt)"
+            text: "Immédiat — FCM (Google)"
             enabled: AppController.notifImmediateAvailable
             checked: notifDialog.notifChoice === "immediate"
             onCheckedChanged: if (checked) notifDialog.notifChoice = "immediate"
@@ -1102,7 +1102,7 @@ Item {
             ButtonGroup.group: settingsNotifGroup
         }
         RadioButton {
-            text: "Immédiat (bientôt disponible)"
+            text: "Immédiat (FCM)"
             enabled: AppController.notifImmediateAvailable
             checked: syncDialog.notifChoice === "immediate"
             onCheckedChanged: if (checked) syncDialog.notifChoice = "immediate"

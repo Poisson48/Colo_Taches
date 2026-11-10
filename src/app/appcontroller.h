@@ -147,7 +147,7 @@ public:
     QString notifProvider();
     int     notifInterval();
     bool    notifOnboardingSeen();
-    bool    notifImmediateAvailable() const { return false; }
+    bool    notifImmediateAvailable();
     QString pushBaseUrl();
     Q_INVOKABLE QString defaultPushBaseUrl() const;
 
