@@ -171,8 +171,8 @@ un pair en ligne.
 2. Ajouter le serveur hub en **dual-write** : les clients publient au hub et au
    relais.
 3. Les clients lisent le hub en priorité ; le relais sert de secours.
-4. Une fois 1 000 utilisateurs validés, le hub devient le chemin principal ;
-   le P2P/TURN reste optionnel pour les petits groupes.
+4. Une fois 1 000 utilisateurs validés, le hub devient le chemin principal.
+   Le P2P/TURN est retiré : plus de maillage, plus de ports TURN.
 5. Les anciens clients continuent via le relais.
 
 ## 9. Ce que cela change pour la v0.32.0
@@ -187,6 +187,6 @@ il peut être déployé derrière le même relais/API sans maillage.
 - Accepte-t-on que la récupération dépende d’au moins un pair en ligne ?
 - Que fait-on si aucun pair complet n’est en ligne pendant longtemps ?
 - Garde-t-on un snapshot de secours pour les listes dormantes ?
-- Les vignettes sont-elles stockées sur le serveur (oui recommandé) et les HD
-  restent-elles P2P (oui) ?
+- Les vignettes sont-elles stockées sur le serveur (oui) ? Les HD ne sont plus
+  synchronisées.
 - Quotas : taille par liste, nombre d’appareils, débit.
