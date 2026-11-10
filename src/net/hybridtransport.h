@@ -73,7 +73,7 @@ private:
 
     RelayPool      m_relay;
     WebRTCTransport m_p2p;
-    Mode           m_mode = Mode::Hybrid;
+    Mode           m_mode = Mode::RelayOnly;
     bool           m_online = false;
     bool           m_shuttingDown = false;
 };

@@ -333,25 +333,6 @@ bool AppController::init() {
     m_db.setSetting("relays", relayParts.join(',').toStdString());
     m_transport.setRelays(relayUrls);
 
-    // --- Serveur P2P (indépendant du relais) ---
-    auto p2pSetting = m_db.getSetting("p2pServerUrl");
-    const QString p2pBase = p2pSetting && !p2pSetting->empty()
-        ? QString::fromStdString(*p2pSetting)
-        : defaultP2pServerUrl();
-    auto signalingSetting = m_db.getSetting("signalingUrl");
-    const QString sigUrl = signalingSetting && !signalingSetting->empty()
-        ? QString::fromStdString(*signalingSetting)
-        : defaultSignalingUrl();
-    m_transport.setSignalingUrl(QUrl(sigUrl));
-    m_transport.setDeviceId(m_deviceId);
-    m_transport.setAppId(QStringLiteral("colotaches"));
-    m_transport.setP2pServerUrl(QUrl(p2pBase));
-
-    auto iceSetting = m_db.getSetting("iceServers");
-    m_transport.setIceServers(iceSetting && !iceSetting->empty()
-        ? QString::fromStdString(*iceSetting).split(QLatin1Char(','), Qt::SkipEmptyParts)
-        : defaultIceServers().split(QLatin1Char('\n'), Qt::SkipEmptyParts));
-
     // Synchronisation serveur uniquement ; migration unique des anciens modes.
     m_syncMode = 0;
     if (!m_db.getSetting("syncModeServerOnlyMigrated")) {
