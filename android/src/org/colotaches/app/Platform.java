@@ -16,8 +16,6 @@ import android.os.Vibrator;
 import android.os.VibratorManager;
 import android.view.WindowManager;
 import android.app.ActivityManager;
-import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.messaging.FirebaseMessaging;
 
@@ -103,10 +101,7 @@ public class Platform {
 
     public static boolean isFcmAvailable(Context ctx) {
         if (ctx == null) return false;
-        int status = GoogleApiAvailability.getInstance()
-                .isGooglePlayServicesAvailable(ctx);
-        return status == ConnectionResult.SUCCESS
-                && !FirebaseApp.getApps(ctx).isEmpty();
+        return ctx != null && !FirebaseApp.getApps(ctx).isEmpty();
     }
 
     public static void wakeBackgroundSync(Context ctx) {
