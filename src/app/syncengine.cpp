@@ -817,20 +817,26 @@ void SyncEngine::maybeSendPushWake(const std::string &listId)
 {
     if (!m_db) return;
     // Le réveil n'existe que si l'utilisateur a choisi le mode différé.
-    const auto mode = m_db->getSetting("notif.mode");
-    if (!mode || *mode != "deferred") return;
+    const auto modeOpt = m_db->getSetting("notif.mode");
+    const QString mode = modeOpt ? QString::fromStdString(*modeOpt) : QString();
+    if (mode != "deferred" && mode != "immediate") return;
 
-    const auto urlOpt = m_db->getSetting("pushBaseUrl");
-    const QString base = urlOpt && !urlOpt->empty()
-        ? QString::fromStdString(*urlOpt)
-        : QStringLiteral("https://colo-apps.les-crevettes-cevenoles.fr/ntfy");
     const auto tagOpt = channelTagForList(listId);
     if (!tagOpt) return;
+    const QString topic = net::pushTopicForChannel(QString::fromStdString(*tagOpt));
 
-    net::sendPushWake(base,
-                      net::pushTopicForChannel(QString::fromStdString(*tagOpt)),
-                      QStringLiteral("Liste mise à jour"),
-                      m_deviceId);
+    const auto urlOpt = m_db->getSetting("pushBaseUrl");
+    QString base = urlOpt && !urlOpt->empty()
+        ? QString::fromStdString(*urlOpt)
+        : QStringLiteral("https://colo-apps.les-crevettes-cevenoles.fr/ntfy");
+
+    if (mode == "immediate") {
+        base.replace(QStringLiteral("/ntfy"), QStringLiteral("/push"));
+        net::sendFcmPush(base, topic);
+        return;
+    }
+
+    net::sendPushWake(base, topic, QStringLiteral("Liste mise à jour"), m_deviceId);
 }
 
 } // namespace app

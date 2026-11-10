@@ -2,6 +2,9 @@
 
 #include <QNetworkAccessManager>
 #include <QNetworkRequest>
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QCoreApplication>
 #include <QUrl>
 
 namespace net {
@@ -31,6 +34,27 @@ void sendPushWake(const QString &baseUrl, const QString &topic, const QString &t
     req.setTransferTimeout(8000);
 
     nam.post(req, QByteArray("sync"));
+}
+
+void sendFcmPush(const QString &endpoint, const QString &topic)
+{
+    if (endpoint.isEmpty() || topic.isEmpty()) return;
+    QUrl url(endpoint.trimmed());
+    if (!url.isValid() || url.scheme().isEmpty()) return;
+
+    QString app = QCoreApplication::applicationName();
+    app = app.contains(QStringLiteral("Taches"), Qt::CaseInsensitive)
+        ? QStringLiteral("colotaches") : QStringLiteral("colocourse");
+
+    QJsonObject body;
+    body[QStringLiteral("app")] = app;
+    body[QStringLiteral("topic")] = topic;
+
+    static QNetworkAccessManager nam;
+    QNetworkRequest req(url);
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    req.setTransferTimeout(8000);
+    nam.post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
 }
 
 } // namespace net

@@ -13,4 +13,7 @@ inline QString pushTopicForChannel(const QString &channelTag)
     return QStringLiteral("colo-%1").arg(channelTag);
 }
 
+// FCM data-only via le broker Colo (/push). Ne transporte aucune donnée de liste.
+void sendFcmPush(const QString &endpoint, const QString &topic);
+
 } // namespace net
