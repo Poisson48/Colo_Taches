@@ -27,7 +27,7 @@ import java.io.OutputStream;
 // pour ne dépendre d'aucun namespace Gradle.
 public class Platform {
 
-    private static final String CHANNEL_ID = "colotaches.sync";
+    public static final String CHANNEL_ID = "colotaches.sync";
     private static final int    NOTIFICATION_ID = 4545;
     private static final int    PERMISSION_REQUEST = 4545;
 

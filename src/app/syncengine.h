@@ -84,6 +84,7 @@ public:
 
     // Subscribe all known lists (called after init, or after reconnect).
     void subscribeAllLists(int64_t since = 0);
+    void setSuppressNotifications(bool suppress) { m_suppressNotifications = suppress; }
 
 signals:
     // N items changed in listId by authorName (from a remote event).
@@ -177,6 +178,7 @@ private:
     QTimer m_debounceTimer;
     QSet<QString> m_pendingLists; // lists awaiting debounce publish
     QHash<QString, QTimer*> m_pushWakeTimers;
+    bool m_suppressNotifications = false;
 
     // Per-event outbox tracking: eventId -> listId.
     std::map<QString, std::string> m_pendingAcks;

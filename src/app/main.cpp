@@ -14,12 +14,28 @@
 #include "taskimageprovider.h"
 #include "theme.h"
 #include "updater.h"
+#include "backgroundsync.h"
+
+#ifdef Q_OS_ANDROID
+#  include <QtCore/private/qandroidextras_p.h>
+#endif
 #ifdef COLO_HAS_CAMERA
 #  include "qrscanner.h"
 #endif
 
 int main(int argc, char *argv[])
 {
+#ifdef Q_OS_ANDROID
+    if (argc > 1 && QString::fromLocal8Bit(argv[1]) == QStringLiteral("-service")) {
+        QAndroidService serviceApp(argc, argv);
+        serviceApp.setOrganizationName("ColoTaches");
+        serviceApp.setApplicationName("ColoTaches");
+        app::BackgroundSync sync;
+        if (!sync.start()) return 0;
+        return serviceApp.exec();
+    }
+#endif
+
     QGuiApplication app(argc, argv);
     app.setOrganizationName("ColoTaches");
     app.setApplicationName("ColoTaches");

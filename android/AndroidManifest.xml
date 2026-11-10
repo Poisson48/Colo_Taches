@@ -77,6 +77,16 @@
                 <action android:name="org.colotaches.app.INSTALL_STATUS"/>
             </intent-filter>
         </receiver>
+        <service
+            android:name="org.colotaches.app.BackgroundSyncService"
+            android:process=":qt_service"
+            android:exported="false"
+            android:foregroundServiceType="dataSync">
+            <meta-data android:name="android.app.lib_name"
+                       android:value="-- %%INSERT_APP_LIB_NAME%% --"/>
+            <meta-data android:name="android.app.arguments" android:value="-service"/>
+            <meta-data android:name="android.app.background_running" android:value="true"/>
+        </service>
         <receiver
             android:name="org.colotaches.app.BackgroundSyncReceiver"
             android:exported="false"/>

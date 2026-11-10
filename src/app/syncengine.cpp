@@ -781,6 +781,7 @@ void SyncEngine::resetDeltaCounter(const std::string& listId)
 
 void SyncEngine::showNotification(const QString& title, const QString& body, qint64 whenMs)
 {
+    if (m_suppressNotifications) return;
     // Android : notification système via JNI. Ailleurs : no-op, on retombe sur le tray.
     if (platformNotify(title, body, whenMs))
         return;
