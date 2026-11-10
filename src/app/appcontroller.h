@@ -109,6 +109,11 @@ class AppController : public QObject {
     Q_PROPERTY(QString p2pServerUrl READ p2pServerUrl NOTIFY syncModeChanged)
     Q_PROPERTY(QString signalingUrl READ signalingUrl NOTIFY syncModeChanged)
     Q_PROPERTY(QString iceServers READ iceServers NOTIFY syncModeChanged)
+    Q_PROPERTY(QString notifMode READ notifMode NOTIFY notifSettingsChanged)
+    Q_PROPERTY(QString notifProvider READ notifProvider NOTIFY notifSettingsChanged)
+    Q_PROPERTY(int notifInterval READ notifInterval NOTIFY notifSettingsChanged)
+    Q_PROPERTY(bool notifOnboardingSeen READ notifOnboardingSeen NOTIFY notifSettingsChanged)
+    Q_PROPERTY(bool notifImmediateAvailable READ notifImmediateAvailable NOTIFY notifSettingsChanged)
 
 public:
     explicit AppController(QObject *parent = nullptr);
@@ -138,8 +143,18 @@ public:
     QString p2pServerUrl();
     QString signalingUrl();
     QString iceServers();
+    QString notifMode();
+    QString notifProvider();
+    int     notifInterval();
+    bool    notifOnboardingSeen();
+    bool    notifImmediateAvailable() const { return false; }
+    QString pushBaseUrl();
+    Q_INVOKABLE QString defaultPushBaseUrl() const;
 
     store::Database &db() { return m_db; }
+
+    static AppController* instance() { return s_instance; }
+    static inline AppController* s_instance = nullptr;
 
 public slots:
     void createList(const QString &title);
@@ -265,6 +280,16 @@ public slots:
     void vibrate(int ms = 18);
     void setKeepScreenOn(bool on);
 
+    Q_INVOKABLE void setNotificationMode(const QString &mode,
+                                         const QString &provider = QStringLiteral("auto"),
+                                         int intervalMinutes = 15);
+    Q_INVOKABLE void markNotificationOnboardingSeen();
+    Q_INVOKABLE void setNotificationInterval(int minutes);
+    Q_INVOKABLE void testNotification();
+    void refreshPushTopics();
+    void onApplicationStateChanged(bool active);
+    Q_INVOKABLE void backgroundSyncNow();
+
     // Access SyncEngine (for ItemModel integration).
     SyncEngine *syncEngine() { return &m_syncEngine; }
 
@@ -276,6 +301,7 @@ signals:
     void customAislesChanged();
     void displayNameChanged();
     void syncModeChanged();
+    void notifSettingsChanged();
     // Emitted when QML should push the item page.
     void listOpened(const QString &listId, const QString &title);
     // Titre changé (ici ou par un autre appareil) : l'en-tête de la liste ouverte suit.

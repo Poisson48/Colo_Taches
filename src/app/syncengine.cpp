@@ -6,6 +6,7 @@
 #include "../core/payload.h"
 #include "../net/crypto.h"
 #include "../net/nostr.h"
+#include "../net/pushclient.h"
 
 #include <QDateTime>
 #include <QDebug>
@@ -28,6 +29,7 @@ namespace app {
 static constexpr int     kDebounceMs        = 300;
 static constexpr int64_t kSnapDeltaThresh   = 100;    // deltas before forcing a snap
 static constexpr int64_t kSnapAgeMs         = 7LL * 24 * 3600 * 1000; // 7 days
+static constexpr int     kPushWakeDebounceMs = 60'000; // 1 min après la dernière modif
 
 // Settings key prefixes
 static constexpr const char* kDeltaCountKey  = "sync.delta_count.";
@@ -122,6 +124,7 @@ void SyncEngine::unregisterItemModel(const std::string& listId, ItemModel* model
 void SyncEngine::onLocalChange(const std::string& listId)
 {
     m_pendingLists.insert(QString::fromStdString(listId));
+    schedulePushWake(listId);
     if (!m_debounceTimer.isActive())
         m_debounceTimer.start();
 }
@@ -792,6 +795,41 @@ void SyncEngine::showNotification(const QString& title, const QString& body, qin
     }
 #endif
     qInfo() << "[Notification]" << title << "—" << body;
+}
+
+void SyncEngine::schedulePushWake(const std::string &listId)
+{
+    const QString key = QString::fromStdString(listId);
+    QTimer *&timer = m_pushWakeTimers[key];
+    if (!timer) {
+        timer = new QTimer(this);
+        timer->setSingleShot(true);
+        timer->setInterval(kPushWakeDebounceMs);
+        connect(timer, &QTimer::timeout, this, [this, listId]() {
+            maybeSendPushWake(listId);
+        });
+    }
+    timer->start();
+}
+
+void SyncEngine::maybeSendPushWake(const std::string &listId)
+{
+    if (!m_db) return;
+    // Le réveil n'existe que si l'utilisateur a choisi le mode différé.
+    const auto mode = m_db->getSetting("notif.mode");
+    if (!mode || *mode != "deferred") return;
+
+    const auto urlOpt = m_db->getSetting("pushBaseUrl");
+    const QString base = urlOpt && !urlOpt->empty()
+        ? QString::fromStdString(*urlOpt)
+        : QStringLiteral("https://colo-apps.les-crevettes-cevenoles.fr/ntfy");
+    const auto tagOpt = channelTagForList(listId);
+    if (!tagOpt) return;
+
+    net::sendPushWake(base,
+                      net::pushTopicForChannel(QString::fromStdString(*tagOpt)),
+                      QStringLiteral("Liste mise à jour"),
+                      m_deviceId);
 }
 
 } // namespace app

@@ -342,10 +342,11 @@ POST /push
 ## 20. État actuel
 
 - P1 : **fait** (Course v0.33.0).
-- P2 : **partiel** — le JobService envoie un broadcast `BackgroundSyncReceiver` ;
-  si le process Qt est encore vivant, `AppController::backgroundSyncNow()` se
-  reconnecte, merge et coupe la socket après 15 s. Si le process est mort, le
-  receiver ne charge pas Qt et seule la notification locale reste (pas encore de
-  `QtService` dédié pour un vrai merge à froid).
+- P2 : **partiel (Course + Tâches)** — le JobService envoie un broadcast
+  `BackgroundSyncReceiver` ; si le process Qt est encore vivant,
+  `AppController::backgroundSyncNow()` se reconnecte, merge et coupe la socket
+  après 15 s. Si le process est mort, le receiver ne charge pas Qt et seule la
+  notification locale reste (pas encore de `QtService` dédié pour un vrai merge
+  à froid).
 - P3/P4/P5 : **à faire**.
 - Colo Tâches : **à porter**.

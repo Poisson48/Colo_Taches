@@ -37,4 +37,9 @@ void platformKeepScreenOn(bool on);
 bool platformAddCalendarEvent(const QString& title, const QString& description,
                               qint64 startMs);
 
+void platformConfigureNotifications(const QString &mode, const QString &provider,
+                                    int intervalMinutes, const QString &baseUrl,
+                                    const QStringList &topics,
+                                    const QString &deviceId);
+
 } // namespace app

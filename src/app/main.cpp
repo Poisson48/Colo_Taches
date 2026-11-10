@@ -46,7 +46,9 @@ int main(int argc, char *argv[])
     // la socket pendant la mise en veille, et la souscription doit être rejouée.
     QObject::connect(&app, &QGuiApplication::applicationStateChanged,
                      &controller, [&controller](Qt::ApplicationState state) {
-        if (state == Qt::ApplicationActive)
+        const bool active = (state == Qt::ApplicationActive);
+        controller.onApplicationStateChanged(active);
+        if (active)
             controller.syncEngine()->subscribeAllLists();
     });
 

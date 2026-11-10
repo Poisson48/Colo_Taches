@@ -9,6 +9,7 @@
 #include <QDesktopServices>
 #include <QDir>
 #include <QGuiApplication>
+#include <QTimer>
 #include <QImage>
 #include <QSettings>
 #include <QStandardPaths>
@@ -28,6 +29,7 @@
 #include "../core/pairing.h"
 #include "../core/csv.h"
 #include "../core/zip.h"
+#include "../net/pushclient.h"
 #include "../net/crypto.h"
 #include "../net/relaypool.h"
 
@@ -251,6 +253,8 @@ AppController::~AppController()
 
 void AppController::shutdown()
 {
+    platformConfigureNotifications(QStringLiteral("off"), notifProvider(),
+                                   notifInterval(), QString(), {}, m_deviceId);
     m_transport.shutdown();
 }
 
@@ -389,6 +393,10 @@ bool AppController::init() {
         ++m_imageRevision;
         emit imageRevisionChanged();
     });
+
+    // Aucun job de fond tant que l'utilisateur n'a pas choisi.
+    platformConfigureNotifications(QStringLiteral("off"), notifProvider(),
+                                   notifInterval(), QString(), {}, m_deviceId);
 
     // --- Connect and subscribe ---
     m_transport.connectAll();
@@ -1713,6 +1721,138 @@ void AppController::requestHd(const QString &sha)
     m_transport.requestImage(
         QString::fromStdString(net::deriveChannelTag(metaOpt->key)),
         sha, QStringLiteral("hd"));
+}
+
+QString AppController::notifMode()
+{
+    const auto v = m_db.getSetting("notif.mode");
+    if (v && (*v == "off" || *v == "deferred" || *v == "immediate"))
+        return QString::fromStdString(*v);
+    return QStringLiteral("unset");
+}
+
+QString AppController::notifProvider()
+{
+    const auto v = m_db.getSetting("notif.provider");
+    return v ? QString::fromStdString(*v) : QStringLiteral("auto");
+}
+
+int AppController::notifInterval()
+{
+    const auto v = m_db.getSetting("notif.interval");
+    if (!v) return 15;
+    const int minutes = std::atoi(v->c_str());
+    return (minutes == 30 || minutes == 60) ? minutes : 15;
+}
+
+bool AppController::notifOnboardingSeen()
+{
+    return m_db.getSetting("notif.onboardingV1").has_value();
+}
+
+QString AppController::pushBaseUrl()
+{
+    const auto v = m_db.getSetting("pushBaseUrl");
+    if (v && !v->empty())
+        return QString::fromStdString(*v);
+    return defaultPushBaseUrl();
+}
+
+QString AppController::defaultPushBaseUrl() const
+{
+    return QStringLiteral("https://colo-apps.les-crevettes-cevenoles.fr/ntfy");
+}
+
+void AppController::markNotificationOnboardingSeen()
+{
+    if (!m_db.isOpen()) return;
+    m_db.setSetting("notif.onboardingV1", "1");
+    emit notifSettingsChanged();
+}
+
+void AppController::setNotificationMode(const QString &mode, const QString &provider,
+                                        int intervalMinutes)
+{
+    if (!m_db.isOpen()) return;
+    if (mode != "off" && mode != "deferred" && mode != "immediate") return;
+    if (mode == "immediate" && !notifImmediateAvailable()) {
+        emit toast(QStringLiteral("Le mode immédiat n'est pas encore disponible"));
+        return;
+    }
+    if (intervalMinutes != 30 && intervalMinutes != 60) intervalMinutes = 15;
+    QString p = provider;
+    if (p != "fcm" && p != "unifiedpush" && p != "auto") p = "auto";
+    m_db.setSetting("notif.mode", mode.toStdString());
+    m_db.setSetting("notif.provider", p.toStdString());
+    m_db.setSetting("notif.interval", std::to_string(intervalMinutes));
+    m_db.setSetting("notif.onboardingV1", "1");
+    refreshPushTopics();
+    emit notifSettingsChanged();
+    emit toast(mode == "off" ? QStringLiteral("Notifications désactivées")
+                             : QStringLiteral("Notifications différées activées"));
+}
+
+void AppController::setNotificationInterval(int minutes)
+{
+    if (minutes != 30 && minutes != 60) minutes = 15;
+    if (notifInterval() == minutes) return;
+    m_db.setSetting("notif.interval", std::to_string(minutes));
+    refreshPushTopics();
+    emit notifSettingsChanged();
+}
+
+void AppController::testNotification()
+{
+    platformNotify(QStringLiteral("Colo Tâches"),
+                   QStringLiteral("Les notifications fonctionnent."));
+}
+
+void AppController::refreshPushTopics()
+{
+    const QString mode = notifMode();
+    const bool on = (mode == "deferred" || mode == "immediate");
+    if (!on) {
+        platformConfigureNotifications(QStringLiteral("off"), notifProvider(),
+                                       notifInterval(), QString(), {}, m_deviceId);
+        return;
+    }
+    if (QGuiApplication::applicationState() == Qt::ApplicationActive) {
+        platformConfigureNotifications(QStringLiteral("off"), notifProvider(),
+                                       notifInterval(), QString(), {}, m_deviceId);
+        return;
+    }
+    if (mode == "immediate") {
+        platformConfigureNotifications(QStringLiteral("off"), notifProvider(),
+                                       notifInterval(), QString(), {}, m_deviceId);
+        return;
+    }
+    QStringList topics;
+    for (const auto &meta : m_db.getLists()) {
+        topics.append(net::pushTopicForChannel(
+            QString::fromStdString(net::deriveChannelTag(meta.key))));
+    }
+    platformConfigureNotifications(QStringLiteral("deferred"), notifProvider(),
+                                   notifInterval(), pushBaseUrl(), topics, m_deviceId);
+}
+
+void AppController::backgroundSyncNow()
+{
+    m_transport.connectAll();
+    m_syncEngine.subscribeAllLists();
+    QTimer::singleShot(15'000, this, [this]() {
+        if (QGuiApplication::applicationState() != Qt::ApplicationActive)
+            m_transport.disconnectAll();
+    });
+}
+
+void AppController::onApplicationStateChanged(bool active)
+{
+    if (active) {
+        platformConfigureNotifications(QStringLiteral("off"), notifProvider(),
+                                       notifInterval(), QString(), {}, m_deviceId);
+    } else {
+        refreshPushTopics();
+    }
 }
 
 } // namespace app

@@ -8,6 +8,7 @@ Dialog {
     id: dlg
 
     property string acceptText: "OK"
+    property string cancelText: "Annuler"
     property bool   acceptEnabled: true
     property bool   destructive: false
     // Masque le bouton de validation : pour un dialogue dont chaque ligne agit au clic
@@ -67,7 +68,7 @@ Dialog {
         Button {
             flat: true
             visible: dlg.showCancel
-            text: "Annuler"
+            text: dlg.cancelText
             implicitHeight: Theme.touchTarget
             contentItem: Label {
                 text: parent.text

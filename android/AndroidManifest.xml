@@ -7,6 +7,7 @@
 
     <!-- Relais Nostr en wss:// : réseau obligatoire. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <!-- Savoir si on est hors ligne (bandeau + file d'attente outbox, SPEC §3.5). -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <!-- Notification locale après un merge distant (SPEC §8). Runtime sur Android 13+. -->
@@ -76,5 +77,12 @@
                 <action android:name="org.colotaches.app.INSTALL_STATUS"/>
             </intent-filter>
         </receiver>
+        <receiver
+            android:name="org.colotaches.app.BackgroundSyncReceiver"
+            android:exported="false"/>
+        <service
+            android:name="org.colotaches.app.DeferredPushJob"
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:exported="false"/>
     </application>
 </manifest>

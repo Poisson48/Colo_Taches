@@ -5,6 +5,7 @@
 #include <QString>
 #include <QStringList>
 #include <QSet>
+#include <QHash>
 #include <cstdint>
 #include <vector>
 #include <map>
@@ -160,6 +161,10 @@ private:
     // whenMs > 0 → horodatage = heure de la modification (pas de la réception).
     void showNotification(const QString& title, const QString& body, qint64 whenMs = 0);
 
+    // Réveil ntfy (mode différé) : un signal générique, jamais le titre de la liste.
+    void schedulePushWake(const std::string& listId);
+    void maybeSendPushWake(const std::string& listId);
+
     store::Database* m_db     = nullptr;
     net::SyncTransport* m_pool = nullptr;
     QString          m_deviceId;
@@ -171,6 +176,7 @@ private:
     // Debounce: per-list timer fired 300 ms after last onLocalChange.
     QTimer m_debounceTimer;
     QSet<QString> m_pendingLists; // lists awaiting debounce publish
+    QHash<QString, QTimer*> m_pushWakeTimers;
 
     // Per-event outbox tracking: eventId -> listId.
     std::map<QString, std::string> m_pendingAcks;

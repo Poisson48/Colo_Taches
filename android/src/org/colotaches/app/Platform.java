@@ -96,6 +96,14 @@ public class Platform {
         nm.notify(NOTIFICATION_ID, builder.build());
     }
 
+    // Veille différée : JobScheduler, aucun service foreground.
+    public static void configureNotifications(Context ctx, String mode, String provider,
+                                              int intervalMinutes, String baseUrl,
+                                              String[] topics, String deviceId) {
+        DeferredPushJob.configure(ctx, mode, provider, intervalMinutes,
+                                  baseUrl, topics, deviceId);
+    }
+
     // Feuille de partage native : le lien d'appairage part dans WhatsApp, SMS, mail…
     public static boolean shareText(Context ctx, String text) {
         if (ctx == null)
