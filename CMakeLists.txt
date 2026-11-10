@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.24)
 
+# libdatachannel/plog déclare encore cmake_minimum_required(3.0) : CMake 4.x
+# refuse cette compatibilité sans ce plancher de politique. Inoffensif sur CMake 3.x.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+
 project(colotaches VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
