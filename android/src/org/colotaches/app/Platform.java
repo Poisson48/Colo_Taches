@@ -150,6 +150,13 @@ public class Platform {
         return ctx != null && !FirebaseApp.getApps(ctx).isEmpty();
     }
 
+    public static void startBackgroundSyncService(Context ctx) {
+        if (ctx == null) return;
+        try {
+            ctx.startForegroundService(new Intent(ctx, BackgroundSyncService.class));
+        } catch (RuntimeException ignored) {}
+    }
+
     public static void wakeBackgroundSync(Context ctx) {
         if (ctx == null) return;
         ActivityManager am = (ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE);
