@@ -1082,7 +1082,10 @@ Item {
             flat: true
             implicitHeight: 40
             contentItem: Label { text: "Choisir comment être prévenu…"; color: Theme.accent; horizontalAlignment: Text.AlignHCenter }
-            onClicked: notifPrefsDialog.open()
+            onClicked: {
+                syncDialog.close()
+                notifPrefsDialog.open()
+            }
         }
         Button {
             Layout.fillWidth: true
