@@ -31,6 +31,10 @@ import java.io.OutputStream;
 public class Platform {
 
     public static final String CHANNEL_ID = "colotaches.sync";
+    private static final String CHANNEL_SOUND = "colotaches.sync.sound";
+    private static final String CHANNEL_VIBRATE = "colotaches.sync.vibrate";
+    private static final String CHANNEL_VISUAL = "colotaches.sync.visual";
+    private static final String PREFS = "colotaches_notif";
     private static final int    NOTIFICATION_ID = 4545;
     private static final int    PERMISSION_REQUEST = 4545;
 
@@ -44,6 +48,42 @@ public class Platform {
                 CHANNEL_ID, "Synchronisation", NotificationManager.IMPORTANCE_DEFAULT);
         channel.setDescription("Changements reçus sur vos listes");
         nm.createNotificationChannel(channel);
+        createSignalChannel(nm, CHANNEL_SOUND, "Synchronisation (son)",
+                NotificationManager.IMPORTANCE_DEFAULT, true, false);
+        createSignalChannel(nm, CHANNEL_VIBRATE, "Synchronisation (vibration)",
+                NotificationManager.IMPORTANCE_DEFAULT, false, true);
+        createSignalChannel(nm, CHANNEL_VISUAL, "Synchronisation (visuel)",
+                NotificationManager.IMPORTANCE_LOW, false, false);
+    }
+
+    private static void createSignalChannel(NotificationManager nm, String id,
+                                            String name, int importance,
+                                            boolean sound, boolean vibrate) {
+        if (nm.getNotificationChannel(id) != null) return;
+        NotificationChannel ch = new NotificationChannel(id, name, importance);
+        ch.setDescription("Changements reçus sur vos listes");
+        ch.setShowBadge(true);
+        if (!sound) ch.setSound(null, null);
+        ch.enableVibration(vibrate);
+        if (vibrate) ch.setVibrationPattern(new long[]{0, 250, 150, 250});
+        nm.createNotificationChannel(ch);
+    }
+
+    public static void setNotificationPreferences(Context ctx, String alert, String signal) {
+        if (ctx == null) return;
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString("alert", "silent".equals(alert) ? "silent" : "notify")
+                .putString("signal", signal != null ? signal : "sound")
+                .apply();
+        createChannel(ctx);
+    }
+
+    private static String notificationChannel(Context ctx) {
+        String signal = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString("signal", "sound");
+        if ("vibrate".equals(signal)) return CHANNEL_VIBRATE;
+        if ("visual".equals(signal)) return CHANNEL_VISUAL;
+        return CHANNEL_SOUND;
     }
 
     // Android 13+ : POST_NOTIFICATIONS est une permission runtime. Sans activité
@@ -70,12 +110,16 @@ public class Platform {
                                         long whenMs) {
         if (ctx == null)
             return;
+        String alert = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString("alert", "notify");
+        if ("silent".equals(alert))
+            return;
         createChannel(ctx);
         NotificationManager nm = ctx.getSystemService(NotificationManager.class);
         if (nm == null)
             return;
 
-        Notification.Builder builder = new Notification.Builder(ctx, CHANNEL_ID)
+        Notification.Builder builder = new Notification.Builder(ctx, notificationChannel(ctx))
                 .setSmallIcon(smallIcon(ctx))
                 .setContentTitle(title)
                 .setContentText(body)

@@ -114,6 +114,8 @@ class AppController : public QObject {
     Q_PROPERTY(int notifInterval READ notifInterval NOTIFY notifSettingsChanged)
     Q_PROPERTY(bool notifOnboardingSeen READ notifOnboardingSeen NOTIFY notifSettingsChanged)
     Q_PROPERTY(bool notifImmediateAvailable READ notifImmediateAvailable NOTIFY notifSettingsChanged)
+    Q_PROPERTY(QString notifAlert READ notifAlert NOTIFY notifSettingsChanged)
+    Q_PROPERTY(QString notifSignal READ notifSignal NOTIFY notifSettingsChanged)
 
 public:
     explicit AppController(QObject *parent = nullptr);
@@ -148,6 +150,8 @@ public:
     int     notifInterval();
     bool    notifOnboardingSeen();
     bool    notifImmediateAvailable();
+    QString notifAlert();
+    QString notifSignal();
     QString pushBaseUrl();
     Q_INVOKABLE QString defaultPushBaseUrl() const;
 
@@ -287,6 +291,8 @@ public slots:
     Q_INVOKABLE void setNotificationInterval(int minutes);
     Q_INVOKABLE void testNotification();
     Q_INVOKABLE void resetNotificationOnboarding();
+    Q_INVOKABLE void setNotificationPreferences(const QString &alert,
+                                                const QString &signal);
     void refreshPushTopics();
     void onApplicationStateChanged(bool active);
     Q_INVOKABLE void backgroundSyncNow();

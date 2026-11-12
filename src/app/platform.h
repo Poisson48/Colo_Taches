@@ -42,5 +42,6 @@ void platformConfigureNotifications(const QString &mode, const QString &provider
                                     const QStringList &topics,
                                     const QString &deviceId);
 bool platformFcmAvailable();
+void platformSetNotificationPreferences(const QString &alert, const QString &signal);
 
 } // namespace app
