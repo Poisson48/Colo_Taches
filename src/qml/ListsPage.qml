@@ -928,82 +928,52 @@ Item {
     // Choix des notifications : proposé une seule fois, sans présélection.
     ColoDialog {
         id: notifDialog
-        title: "Notifications et arrière-plan"
+        title: "Notifications"
         acceptText: "Activer"
         acceptEnabled: notifChoice.length > 0
         cancelText: "Plus tard"
 
         property string notifChoice: ""
         property int notifInterval: 15
-        property string notifAlert: "notify"
         property string notifSignal: "sound"
 
         onOpened: {
             notifChoice = ""
             notifInterval = 15
-            notifAlert = AppController.notifAlert
             notifSignal = AppController.notifSignal
             AppController.markNotificationOnboardingSeen()
         }
         onAccepted: {
-            AppController.setNotificationPreferences(notifAlert, notifSignal)
-            if (notifChoice.length > 0)
-                AppController.setNotificationMode(notifChoice, "auto", notifInterval)
+            const notify = notifChoice !== "silent" && notifChoice !== "off"
+            AppController.setNotificationPreferences(notify ? "notify" : "silent", notifSignal)
+            if (notifChoice === "off") AppController.setNotificationMode("off", "auto", 15)
+            else if (notifChoice === "silent") AppController.setNotificationMode(AppController.notifImmediateAvailable ? "immediate" : "deferred", "auto", notifInterval)
+            else if (notifChoice === "deferred") AppController.setNotificationMode("deferred", "auto", notifInterval)
+            else AppController.setNotificationMode("immediate", "auto", notifInterval)
         }
 
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.textDim
-            font.pixelSize: 13
-            text: "Comment veux-tu être prévenu des changements ? "
-                  + "Aucun mode n'est présélectionné."
-        }
-
+        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 13; text: "Comment veux-tu être prévenu quand une liste est modifiée ?" }
         ButtonGroup { id: notifGroupBox }
-
-        RadioButton {
-            text: "Désactivé"
-            checked: notifDialog.notifChoice === "off"
-            onCheckedChanged: if (checked) notifDialog.notifChoice = "off"
-            ButtonGroup.group: notifGroupBox
-        }
-        RadioButton {
-            text: "Différé (15/30/60 min)"
-            checked: notifDialog.notifChoice === "deferred"
-            onCheckedChanged: if (checked) notifDialog.notifChoice = "deferred"
-            ButtonGroup.group: notifGroupBox
-        }
-        RadioButton {
-            text: "Immédiat — FCM (Google)"
-            enabled: AppController.notifImmediateAvailable
-            checked: notifDialog.notifChoice === "immediate"
-            onCheckedChanged: if (checked) notifDialog.notifChoice = "immediate"
-            ButtonGroup.group: notifGroupBox
-        }
-
+        RadioButton { text: "M'avertir immédiatement"; checked: notifDialog.notifChoice === "immediate"; onCheckedChanged: if (checked) notifDialog.notifChoice = "immediate"; ButtonGroup.group: notifGroupBox }
+        RadioButton { text: "M'avertir par périodes (15/30/60 min)"; checked: notifDialog.notifChoice === "deferred"; onCheckedChanged: if (checked) notifDialog.notifChoice = "deferred"; ButtonGroup.group: notifGroupBox }
+        RadioButton { text: "Synchroniser sans notification"; checked: notifDialog.notifChoice === "silent"; onCheckedChanged: if (checked) notifDialog.notifChoice = "silent"; ButtonGroup.group: notifGroupBox }
+        RadioButton { text: "Ne rien faire en arrière-plan"; checked: notifDialog.notifChoice === "off"; onCheckedChanged: if (checked) notifDialog.notifChoice = "off"; ButtonGroup.group: notifGroupBox }
         RowLayout {
             Layout.fillWidth: true
             visible: notifDialog.notifChoice === "deferred"
-            Label { text: "Intervalle"; color: Theme.textDim; font.pixelSize: 13 }
+            Label { text: "Toutes les"; color: Theme.textDim; font.pixelSize: 13 }
             Item { Layout.fillWidth: true }
             ComboBox {
                 model: ["15 min", "30 min", "60 min"]
-                currentIndex: notifDialog.notifInterval === 30 ? 1
-                              : notifDialog.notifInterval === 60 ? 2 : 0
-                onActivated: notifDialog.notifInterval =
-                             index === 1 ? 30 : (index === 2 ? 60 : 15)
+                currentIndex: notifDialog.notifInterval === 30 ? 1 : notifDialog.notifInterval === 60 ? 2 : 0
+                onActivated: notifDialog.notifInterval = index === 1 ? 30 : (index === 2 ? 60 : 15)
                 font.pixelSize: 14
             }
         }
-
-        Label { Layout.fillWidth: true; Layout.topMargin: 4; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 13; text: "Quand une liste change :" }
-        ButtonGroup { id: notifAlertGroupBox }
-        RadioButton { text: "Me notifier"; checked: notifDialog.notifAlert === "notify"; onCheckedChanged: if (checked) notifDialog.notifAlert = "notify"; ButtonGroup.group: notifAlertGroupBox }
-        RadioButton { text: "Synchroniser sans notification"; checked: notifDialog.notifAlert === "silent"; onCheckedChanged: if (checked) notifDialog.notifAlert = "silent"; ButtonGroup.group: notifAlertGroupBox }
+        Label { Layout.fillWidth: true; Layout.topMargin: 4; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 13; visible: notifDialog.notifChoice !== "silent" && notifDialog.notifChoice !== "off"; text: "Quand une notification s'affiche :" }
         RowLayout {
             Layout.fillWidth: true
-            visible: notifDialog.notifAlert === "notify"
+            visible: notifDialog.notifChoice !== "silent" && notifDialog.notifChoice !== "off"
             Label { text: "Signal"; color: Theme.textDim; font.pixelSize: 13 }
             Item { Layout.fillWidth: true }
             ComboBox {
@@ -1013,39 +983,9 @@ Item {
                 font.pixelSize: 14
             }
         }
+        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 12; visible: notifDialog.notifChoice === "silent"; text: "Les listes continueront à se synchroniser en arrière-plan, sans aucune notification." }
 
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.textDim
-            font.pixelSize: 12
-            text: "Tu pourras changer ce choix dans Réglages. "
-                  + "« Plus tard » ne programme rien en arrière-plan."
-        }
     }
-
-    ColoDialog {
-        id: leaveDialog
-        title: "Quitter la liste ?"
-        acceptText: "Quitter"
-        destructive: true
-
-        property string listId: ""
-        property string listName: ""
-
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.textDim
-            font.pixelSize: 14
-            text: "« " + leaveDialog.listName + " » sera effacée de cet appareil. "
-                  + "Les autres participants la gardent, et vous pourrez la rejoindre à nouveau avec le lien."
-        }
-
-        onAccepted: AppController.leaveList(leaveDialog.listId)
-    }
-
-    // --- Synchronisation : relais Nostr chiffré (serveur uniquement) ---
 
     ColoDialog {
         id: notifPrefsDialog
@@ -1053,59 +993,67 @@ Item {
         acceptText: "Enregistrer"
         cancelText: "Annuler"
 
-        property string alert: "notify"
-        property string signal: "sound"
+        property string notifChoice: ""
+        property int notifInterval: 15
+        property string notifSignal: "sound"
 
         onOpened: {
-            alert = AppController.notifAlert
-            signal = AppController.notifSignal
+            const m = AppController.notifMode
+            const a = AppController.notifAlert
+            notifChoice = m === "off" ? "off" : (a === "silent" ? "silent" : (m === "deferred" ? "deferred" : "immediate"))
+            notifInterval = AppController.notifInterval
+            notifSignal = AppController.notifSignal
         }
-        onAccepted: AppController.setNotificationPreferences(alert, signal)
+        onAccepted: {
+            const notify = notifChoice !== "silent" && notifChoice !== "off"
+            AppController.setNotificationPreferences(notify ? "notify" : "silent", notifSignal)
+            if (notifChoice === "off") AppController.setNotificationMode("off", "auto", 15)
+            else if (notifChoice === "silent") AppController.setNotificationMode(AppController.notifImmediateAvailable ? "immediate" : "deferred", "auto", notifInterval)
+            else if (notifChoice === "deferred") AppController.setNotificationMode("deferred", "auto", notifInterval)
+            else AppController.setNotificationMode("immediate", "auto", notifInterval)
+        }
 
-        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 13; text: "Choisis si une modification affiche une notification, ou synchronise seulement en arrière-plan." }
-        ButtonGroup { id: prefsAlertGroup }
-        RadioButton { text: "Me notifier"; checked: notifPrefsDialog.alert === "notify"; onCheckedChanged: if (checked) notifPrefsDialog.alert = "notify"; ButtonGroup.group: prefsAlertGroup }
-        RadioButton { text: "Synchroniser sans notification"; checked: notifPrefsDialog.alert === "silent"; onCheckedChanged: if (checked) notifPrefsDialog.alert = "silent"; ButtonGroup.group: prefsAlertGroup }
-        Label { Layout.fillWidth: true; Layout.topMargin: 4; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 13; visible: notifPrefsDialog.alert === "notify"; text: "Quand une notification est affichée :" }
+        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 13; text: "Comment veux-tu être prévenu quand une liste est modifiée ?" }
+        ButtonGroup { id: prefsGroupBox }
+        RadioButton { text: "M'avertir immédiatement"; checked: notifPrefsDialog.notifChoice === "immediate"; onCheckedChanged: if (checked) notifPrefsDialog.notifChoice = "immediate"; ButtonGroup.group: prefsGroupBox }
+        RadioButton { text: "M'avertir par périodes (15/30/60 min)"; checked: notifPrefsDialog.notifChoice === "deferred"; onCheckedChanged: if (checked) notifPrefsDialog.notifChoice = "deferred"; ButtonGroup.group: prefsGroupBox }
+        RadioButton { text: "Synchroniser sans notification"; checked: notifPrefsDialog.notifChoice === "silent"; onCheckedChanged: if (checked) notifPrefsDialog.notifChoice = "silent"; ButtonGroup.group: prefsGroupBox }
+        RadioButton { text: "Ne rien faire en arrière-plan"; checked: notifPrefsDialog.notifChoice === "off"; onCheckedChanged: if (checked) notifPrefsDialog.notifChoice = "off"; ButtonGroup.group: prefsGroupBox }
         RowLayout {
             Layout.fillWidth: true
-            visible: notifPrefsDialog.alert === "notify"
+            visible: notifPrefsDialog.notifChoice === "deferred"
+            Label { text: "Toutes les"; color: Theme.textDim; font.pixelSize: 13 }
+            Item { Layout.fillWidth: true }
+            ComboBox {
+                model: ["15 min", "30 min", "60 min"]
+                currentIndex: notifPrefsDialog.notifInterval === 30 ? 1 : notifPrefsDialog.notifInterval === 60 ? 2 : 0
+                onActivated: notifPrefsDialog.notifInterval = index === 1 ? 30 : (index === 2 ? 60 : 15)
+                font.pixelSize: 14
+            }
+        }
+        Label { Layout.fillWidth: true; Layout.topMargin: 4; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 13; visible: notifPrefsDialog.notifChoice !== "silent" && notifPrefsDialog.notifChoice !== "off"; text: "Quand une notification s'affiche :" }
+        RowLayout {
+            Layout.fillWidth: true
+            visible: notifPrefsDialog.notifChoice !== "silent" && notifPrefsDialog.notifChoice !== "off"
             Label { text: "Signal"; color: Theme.textDim; font.pixelSize: 13 }
             Item { Layout.fillWidth: true }
             ComboBox {
                 model: ["Son", "Vibration", "Visuel seulement"]
-                currentIndex: notifPrefsDialog.signal === "vibrate" ? 1 : notifPrefsDialog.signal === "visual" ? 2 : 0
-                onActivated: notifPrefsDialog.signal = index === 1 ? "vibrate" : (index === 2 ? "visual" : "sound")
+                currentIndex: notifPrefsDialog.notifSignal === "vibrate" ? 1 : notifPrefsDialog.notifSignal === "visual" ? 2 : 0
+                onActivated: notifPrefsDialog.notifSignal = index === 1 ? "vibrate" : (index === 2 ? "visual" : "sound")
                 font.pixelSize: 14
             }
         }
-        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 12; visible: notifPrefsDialog.alert === "silent"; text: "Aucune notification ne s'affichera, mais la synchronisation continue en arrière-plan." }
+        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 12; visible: notifPrefsDialog.notifChoice === "silent"; text: "Les listes continueront à se synchroniser en arrière-plan, sans aucune notification." }
+
     }
 
     ColoDialog {
         id: syncDialog
         title: "Réglages"
         acceptText: "Enregistrer"
-        property string notifChoice: ""
-        property int notifInterval: 15
-
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.textDim
-            font.pixelSize: 13
-            text: "Synchronisation via le relais chiffré Colo. "
-                  + "Aucun P2P, aucun TURN : le relais conserve les changements "
-                  + "jusqu'à ce que tous les appareils les aient reçus."
-        }
-
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.textDim
-            font.pixelSize: 13
-            text: "Relais Nostr (wss://…), une URL par ligne."
-        }
+        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 13; text: "Synchronisation sécurisée entre tes appareils." }
+        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 12; text: "Serveur (adresse technique, une URL par ligne) :" }
 
         Rectangle {
             Layout.fillWidth: true
@@ -1128,85 +1076,19 @@ Item {
             }
         }
 
-        Label {
-            Layout.fillWidth: true
-            Layout.topMargin: 8
-            wrapMode: Text.WordWrap
-            color: Theme.textDim
-            font.pixelSize: 13
-            text: "Notifications et arrière-plan"
-        }
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.textDim
-            font.pixelSize: 12
-            text: "Aucun mode n'est présélectionné. Sans choix, rien ne tourne en arrière-plan."
-        }
-
-        ButtonGroup { id: settingsNotifGroup }
-        RadioButton {
-            text: "Désactivé"
-            checked: syncDialog.notifChoice === "off"
-            onCheckedChanged: if (checked) syncDialog.notifChoice = "off"
-            ButtonGroup.group: settingsNotifGroup
-        }
-        RadioButton {
-            text: "Différé (15/30/60 min)"
-            checked: syncDialog.notifChoice === "deferred"
-            onCheckedChanged: if (checked) syncDialog.notifChoice = "deferred"
-            ButtonGroup.group: settingsNotifGroup
-        }
-        RadioButton {
-            text: "Immédiat (FCM)"
-            enabled: AppController.notifImmediateAvailable
-            checked: syncDialog.notifChoice === "immediate"
-            onCheckedChanged: if (checked) syncDialog.notifChoice = "immediate"
-            ButtonGroup.group: settingsNotifGroup
-        }
-        RowLayout {
-            Layout.fillWidth: true
-            visible: syncDialog.notifChoice === "deferred"
-            Label { text: "Intervalle"; color: Theme.textDim; font.pixelSize: 13 }
-            Item { Layout.fillWidth: true }
-            ComboBox {
-                model: ["15 min", "30 min", "60 min"]
-                currentIndex: syncDialog.notifInterval === 30 ? 1
-                              : syncDialog.notifInterval === 60 ? 2 : 0
-                onActivated: syncDialog.notifInterval =
-                             index === 1 ? 30 : (index === 2 ? 60 : 15)
-                font.pixelSize: 14
-            }
-        }
+        Label { Layout.fillWidth: true; Layout.topMargin: 8; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 13; text: "Notifications" }
         Button {
             Layout.fillWidth: true
             flat: true
             implicitHeight: 40
-            contentItem: Label {
-                text: "Réglages des notifications…"
-                color: Theme.accent
-                horizontalAlignment: Text.AlignHCenter
-            }
+            contentItem: Label { text: "Choisir comment être prévenu…"; color: Theme.accent; horizontalAlignment: Text.AlignHCenter }
             onClicked: notifPrefsDialog.open()
         }
-
-        Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Theme.textDim
-            font.pixelSize: 12
-            visible: syncDialog.notifChoice.length === 0
-            text: "Notifications non configurées : choisis un mode ci-dessus."
-        }
         Button {
             Layout.fillWidth: true
             flat: true
             implicitHeight: 40
-            contentItem: Label {
-                text: "Tester la notification"
-                color: Theme.accent
-                horizontalAlignment: Text.AlignHCenter
-            }
+            contentItem: Label { text: "Tester la notification"; color: Theme.accent; horizontalAlignment: Text.AlignHCenter }
             onClicked: AppController.testNotification()
         }
 
@@ -1226,19 +1108,10 @@ Item {
             }
         }
 
-        onOpened: {
-            relayField.text = AppController.relayUrls
-            notifChoice = AppController.notifMode === "unset"
-                        ? "" : AppController.notifMode
-            notifInterval = AppController.notifInterval
-            notifAlert = AppController.notifAlert
-            notifSignal = AppController.notifSignal
-        }
+        onOpened: relayField.text = AppController.relayUrls
         onAccepted: {
             AppController.setRelayUrls(relayField.text)
             AppController.setSyncMode(0)
-            if (notifChoice.length > 0)
-                AppController.setNotificationMode(notifChoice, "auto", notifInterval)
         }
     }
 
