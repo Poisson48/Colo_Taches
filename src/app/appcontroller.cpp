@@ -1872,33 +1872,43 @@ void AppController::refreshPushTopics()
 {
     const QString mode = notifMode();
     const bool on = (mode == "deferred" || mode == "immediate");
-    if (!on) {
-        platformConfigureNotifications(QStringLiteral("off"), notifProvider(),
-                                       notifInterval(), QString(), {}, m_deviceId);
-        return;
-    }
-    if (QGuiApplication::applicationState() == Qt::ApplicationActive) {
-        platformConfigureNotifications(QStringLiteral("off"), notifProvider(),
-                                       notifInterval(), QString(), {}, m_deviceId);
-        return;
-    }
-    if (mode == "immediate") {
+    auto currentTopics = [this]() {
         QStringList topics;
         for (const auto &meta : m_db.getLists())
             topics.append(net::pushTopicForChannel(
                 QString::fromStdString(net::deriveChannelTag(meta.key))));
-        platformConfigureNotifications(QStringLiteral("immediate"),
-                                       QStringLiteral("fcm"),
-                                       notifInterval(), QString(), topics, m_deviceId);
+        return topics;
+    };
+    if (!on) {
+        platformConfigureNotifications(QStringLiteral("off"), notifProvider(),
+                                       notifInterval(), pushBaseUrl(), currentTopics(),
+                                       m_deviceId);
         return;
     }
-    QStringList topics;
-    for (const auto &meta : m_db.getLists()) {
-        topics.append(net::pushTopicForChannel(
-            QString::fromStdString(net::deriveChannelTag(meta.key))));
+    if (QGuiApplication::applicationState() == Qt::ApplicationActive) {
+        platformConfigureNotifications(QStringLiteral("off"), notifProvider(),
+                                       notifInterval(), pushBaseUrl(), currentTopics(),
+                                       m_deviceId);
+        return;
+    }
+    if (mode == "immediate") {
+        if (notifProvider() == QStringLiteral("unifiedpush")) {
+            platformRegisterUnifiedPush();
+            platformConfigureNotifications(QStringLiteral("off"),
+                                           QStringLiteral("unifiedpush"),
+                                           notifInterval(), pushBaseUrl(),
+                                           currentTopics(), m_deviceId);
+            return;
+        }
+        platformConfigureNotifications(QStringLiteral("immediate"),
+                                       QStringLiteral("fcm"),
+                                       notifInterval(), pushBaseUrl(),
+                                       currentTopics(), m_deviceId);
+        return;
     }
     platformConfigureNotifications(QStringLiteral("deferred"), notifProvider(),
-                                   notifInterval(), pushBaseUrl(), topics, m_deviceId);
+                                   notifInterval(), pushBaseUrl(), currentTopics(),
+                                   m_deviceId);
 }
 
 void AppController::backgroundSyncNow()

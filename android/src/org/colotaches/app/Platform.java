@@ -233,6 +233,17 @@ public class Platform {
     public static void configureNotifications(Context ctx, String mode, String provider,
                                               int intervalMinutes, String baseUrl,
                                               String[] topics, String deviceId) {
+        if ("unifiedpush".equals(provider)) {
+            DeferredPushJob.configure(ctx, "off", provider, intervalMinutes,
+                                      "", new String[0], deviceId);
+            if (topics != null) {
+                for (String topic : topics) {
+                    if (topic != null && !topic.isEmpty())
+                        FirebaseMessaging.getInstance().unsubscribeFromTopic(topic);
+                }
+            }
+            return;
+        }
         if ("immediate".equals(mode) && "fcm".equals(provider)) {
             DeferredPushJob.configure(ctx, "off", provider, intervalMinutes,
                                       "", new String[0], deviceId);

@@ -966,7 +966,7 @@ Item {
             Label { text: "Moteur"; color: Theme.textDim; font.pixelSize: 13 }
             Item { Layout.fillWidth: true }
             ComboBox {
-                model: ["Google FCM", "Sans Google (UnifiedPush)"]
+                model: ["Google (FCM)", "Sans Google"]
                 currentIndex: notifDialog.notifProviderChoice === "unifiedpush" ? 1 : 0
                 onActivated: notifDialog.notifProviderChoice = index === 1 ? "unifiedpush" : "fcm"
                 font.pixelSize: 14
@@ -1042,7 +1042,7 @@ Item {
             Label { text: "Moteur"; color: Theme.textDim; font.pixelSize: 13 }
             Item { Layout.fillWidth: true }
             ComboBox {
-                model: ["Google FCM", "Sans Google (UnifiedPush)"]
+                model: ["Google (FCM)", "Sans Google"]
                 currentIndex: notifPrefsDialog.notifProviderChoice === "unifiedpush" ? 1 : 0
                 onActivated: notifPrefsDialog.notifProviderChoice = index === 1 ? "unifiedpush" : "fcm"
                 font.pixelSize: 14
