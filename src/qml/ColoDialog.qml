@@ -55,18 +55,9 @@ Dialog {
         bottomPadding: 4
     }
 
-    contentItem: ScrollView {
-        id: contentScroll
-        Layout.fillWidth: true
-        implicitHeight: Math.min(content.implicitHeight, dlg.contentMaxHeight)
-        clip: true
-        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-        ColumnLayout {
-            id: content
-            width: contentScroll.availableWidth
-            spacing: Theme.gap
-        }
+    contentItem: ColumnLayout {
+        id: content
+        spacing: Theme.gap
     }
 
     footer: RowLayout {

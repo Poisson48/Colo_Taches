@@ -1048,6 +1048,41 @@ Item {
     // --- Synchronisation : relais Nostr chiffré (serveur uniquement) ---
 
     ColoDialog {
+        id: notifPrefsDialog
+        title: "Notifications"
+        acceptText: "Enregistrer"
+        cancelText: "Annuler"
+
+        property string alert: "notify"
+        property string signal: "sound"
+
+        onOpened: {
+            alert = AppController.notifAlert
+            signal = AppController.notifSignal
+        }
+        onAccepted: AppController.setNotificationPreferences(alert, signal)
+
+        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 13; text: "Choisis si une modification affiche une notification, ou synchronise seulement en arrière-plan." }
+        ButtonGroup { id: prefsAlertGroup }
+        RadioButton { text: "Me notifier"; checked: notifPrefsDialog.alert === "notify"; onCheckedChanged: if (checked) notifPrefsDialog.alert = "notify"; ButtonGroup.group: prefsAlertGroup }
+        RadioButton { text: "Synchroniser sans notification"; checked: notifPrefsDialog.alert === "silent"; onCheckedChanged: if (checked) notifPrefsDialog.alert = "silent"; ButtonGroup.group: prefsAlertGroup }
+        Label { Layout.fillWidth: true; Layout.topMargin: 4; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 13; visible: notifPrefsDialog.alert === "notify"; text: "Quand une notification est affichée :" }
+        RowLayout {
+            Layout.fillWidth: true
+            visible: notifPrefsDialog.alert === "notify"
+            Label { text: "Signal"; color: Theme.textDim; font.pixelSize: 13 }
+            Item { Layout.fillWidth: true }
+            ComboBox {
+                model: ["Son", "Vibration", "Visuel seulement"]
+                currentIndex: notifPrefsDialog.signal === "vibrate" ? 1 : notifPrefsDialog.signal === "visual" ? 2 : 0
+                onActivated: notifPrefsDialog.signal = index === 1 ? "vibrate" : (index === 2 ? "visual" : "sound")
+                font.pixelSize: 14
+            }
+        }
+        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 12; visible: notifPrefsDialog.alert === "silent"; text: "Aucune notification ne s'affichera, mais la synchronisation continue en arrière-plan." }
+    }
+
+    ColoDialog {
         id: syncDialog
         title: "Réglages"
         acceptText: "Enregistrer"
@@ -1072,25 +1107,24 @@ Item {
             text: "Relais Nostr (wss://…), une URL par ligne."
         }
 
-        ScrollView {
+        Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.min(relayField.implicitHeight + 16, 160)
-            clip: true
+            Layout.preferredHeight: 150
+            radius: 12
+            color: Theme.surfaceHigh
+            border.color: Theme.outline
 
             TextArea {
                 id: relayField
-                width: parent.width
+                anchors.fill: parent
+                anchors.margins: 8
                 wrapMode: TextArea.Wrap
                 color: Theme.text
                 font.pixelSize: 13
                 font.family: "monospace"
                 selectByMouse: true
+                background: null
                 placeholderText: AppController.defaultRelayUrls()
-                background: Rectangle {
-                    radius: 12
-                    color: Theme.surfaceHigh
-                    border.color: Theme.outline
-                }
             }
         }
 
@@ -1144,21 +1178,16 @@ Item {
                 font.pixelSize: 14
             }
         }
-        Label { Layout.fillWidth: true; Layout.topMargin: 4; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 13; text: "Quand une liste change :" }
-        ButtonGroup { id: settingsAlertGroup }
-        RadioButton { text: "Me notifier"; checked: syncDialog.notifAlert === "notify"; onCheckedChanged: if (checked) syncDialog.notifAlert = "notify"; ButtonGroup.group: settingsAlertGroup }
-        RadioButton { text: "Synchroniser sans notification"; checked: syncDialog.notifAlert === "silent"; onCheckedChanged: if (checked) syncDialog.notifAlert = "silent"; ButtonGroup.group: settingsAlertGroup }
-        RowLayout {
+        Button {
             Layout.fillWidth: true
-            visible: syncDialog.notifAlert === "notify"
-            Label { text: "Signal"; color: Theme.textDim; font.pixelSize: 13 }
-            Item { Layout.fillWidth: true }
-            ComboBox {
-                model: ["Son", "Vibration", "Visuel seulement"]
-                currentIndex: syncDialog.notifSignal === "vibrate" ? 1 : syncDialog.notifSignal === "visual" ? 2 : 0
-                onActivated: syncDialog.notifSignal = index === 1 ? "vibrate" : (index === 2 ? "visual" : "sound")
-                font.pixelSize: 14
+            flat: true
+            implicitHeight: 40
+            contentItem: Label {
+                text: "Réglages des notifications…"
+                color: Theme.accent
+                horizontalAlignment: Text.AlignHCenter
             }
+            onClicked: notifPrefsDialog.open()
         }
 
         Label {
