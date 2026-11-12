@@ -2,6 +2,8 @@ package org.colotaches.app;
 
 import android.util.Log;
 
+import java.nio.charset.StandardCharsets;
+
 import org.unifiedpush.android.connector.FailedReason;
 import org.unifiedpush.android.connector.PushService;
 import org.unifiedpush.android.connector.data.PushEndpoint;
@@ -13,7 +15,9 @@ public class UnifiedPushService extends PushService {
 
     @Override
     public void onMessage(PushMessage message, String instance) {
-        if (message == null || !message.getDecrypted()) return;
+        if (message == null) return;
+        final String text = new String(message.getContent(), StandardCharsets.UTF_8);
+        if (!message.getDecrypted() && !"sync".equals(text)) return;
         Platform.wakeBackgroundSync(this);
         Platform.showNotification(this, "Liste mise à jour",
                 "Ouvrez l'app pour voir le détail.");
