@@ -396,8 +396,16 @@ bool AppController::init() {
 
     // Aucun job de fond tant que l'utilisateur n'a pas choisi.
     platformSetNotificationPreferences(notifAlert(), notifSignal());
-    if (notifMode() == "immediate" && notifProvider() == "unifiedpush")
+    if (notifMode() == "immediate" && notifProvider() == "unifiedpush") {
         platformRegisterUnifiedPush();
+        QStringList topics;
+        for (const auto &meta : m_db.getLists())
+            topics.append(net::pushTopicForChannel(
+                QString::fromStdString(net::deriveChannelTag(meta.key))));
+        platformConfigureNotifications(QStringLiteral("off"),
+                                       QStringLiteral("unifiedpush"),
+                                       notifInterval(), pushBaseUrl(), topics, m_deviceId);
+    }
     platformConfigureNotifications(QStringLiteral("off"), notifProvider(),
                                    notifInterval(), QString(), {}, m_deviceId);
 
@@ -1840,8 +1848,16 @@ void AppController::setNotificationMode(const QString &mode, const QString &prov
     m_db.setSetting("notif.mode", mode.toStdString());
     m_db.setSetting("notif.provider", p.toStdString());
     m_db.setSetting("notif.interval", std::to_string(intervalMinutes));
-    if (mode == "immediate" && p == "unifiedpush")
+    if (mode == "immediate" && p == "unifiedpush") {
         platformRegisterUnifiedPush();
+        QStringList topics;
+        for (const auto &meta : m_db.getLists())
+            topics.append(net::pushTopicForChannel(
+                QString::fromStdString(net::deriveChannelTag(meta.key))));
+        platformConfigureNotifications(QStringLiteral("off"),
+                                       QStringLiteral("unifiedpush"),
+                                       notifInterval(), pushBaseUrl(), topics, m_deviceId);
+    }
     m_db.setSetting("notif.onboardingV1", "1");
     refreshPushTopics();
     emit notifSettingsChanged();
