@@ -149,7 +149,7 @@ POST /push
 ```
 
 - FCM data-only ou UnifiedPush (endpoint par appareil) ;
-- `/config` expose les capacités ;
+- `GET /config` expose les capacités ; le health public est `GET /push`.
 - côté app : `notif.mode` (`off|deferred|immediate`), `notif.provider`
   (`auto|fcm|unifiedpush`), `notif.alert` (`notify|silent`), `notif.signal`
   (`sound|vibrate|visual|none`) ;

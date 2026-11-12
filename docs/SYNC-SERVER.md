@@ -20,16 +20,20 @@ Appareil A ── wss ──► Strfry ── wss ──► Appareil B
 - `wss://colo-apps.les-crevettes-cevenoles.fr` ;
 - kind `4545` uniquement, tag `t=channelTag` ;
 - blobs chiffrés XChaCha20-Poly1305 ;
-- `maxEventSize` 256 Ko (photos de tâches) ;
+- `maxEventSize = 262144` (256 Ko). L'instance a refusé 66 Ko avant le 2026-11-12 (config montée sur `/app/strfry.conf` au lieu de `/etc/strfry.conf`) ; corrigé. Snapshots fragmentés à ~32 Ko.
 - aucun accès en clair aux listes.
 
 ## Broker
 
 - `/push` FCM data-only + endpoints UnifiedPush ;
-- `/config` capacités ;
+- `GET /config` est exposé publiquement via nginx ; `GET /push` reste le health simple.
 - secrets FCM dans `/data/leo/colo-apps/secrets/fcm-service-account.json` ;
 - registre UnifiedPush dans
   `/data/leo/colo-apps/push/endpoints.json`.
+
+> **État actuel** : DB Strfry quasi neuve (~23 événements kind 4545), uptime
+> court. Ce n'est pas une sauvegarde ; les clients re-sèment par snapshots.
+> Sauvegarder les volumes Strfry/ntfy.
 
 ## Déploiement
 
@@ -37,8 +41,10 @@ Voir [Colo_Course/deploy](https://github.com/Poisson48/Colo_Course/tree/main/dep
 pour les scripts de référence. Vérifications :
 
 ```bash
+curl -fsS https://colo-apps.les-crevettes-cevenoles.fr/config
 curl -fsS https://colo-apps.les-crevettes-cevenoles.fr/push
 curl -fsS https://colo-apps.les-crevettes-cevenoles.fr/config
+curl -fsS https://colo-apps.les-crevettes-cevenoles.fr/push
 systemctl is-active colopush nginx
 ```
 

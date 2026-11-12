@@ -63,7 +63,8 @@ Réponses utiles :
 {"ok":true,"fcm":true,"unifiedpush":1}
 ```
 
-`GET /config` expose `notifications.fcm` et `notifications.unifiedpush`.
+`GET /config` est exposé publiquement et renvoie les capacités FCM/UnifiedPush.
+`GET /push` reste le health simple.
 
 ## Limites connues
 
