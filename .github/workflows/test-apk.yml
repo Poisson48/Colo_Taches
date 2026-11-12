@@ -1,0 +1,14 @@
+name: Test APK
+
+# APK signé release pour tester sans publier de Release.
+on:
+  workflow_dispatch:
+
+jobs:
+  apk:
+    uses: ./.github/workflows/android.yml
+    with:
+      version_name: ${{ github.sha }}
+      version_code: 9999
+      require_release_key: true
+    secrets: inherit
