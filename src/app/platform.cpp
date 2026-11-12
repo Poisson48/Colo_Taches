@@ -1,5 +1,7 @@
 #include "platform.h"
 
+#include <QProcess>
+
 #ifdef Q_OS_ANDROID
 #  include <QCoreApplication>
 #  include <QJniObject>
@@ -170,7 +172,15 @@ void platformConfigureNotifications(const QString &mode, const QString &provider
 
 void initNotifications() {}
 
-bool platformNotify(const QString&, const QString&, qint64) { return false; }
+bool platformNotify(const QString& title, const QString& body, qint64)
+{
+#ifdef Q_OS_LINUX
+    return QProcess::startDetached(QStringLiteral("notify-send"),
+                                   {QStringLiteral("--app-name=Colo Tâches"), title, body});
+#else
+    return false;
+#endif
+}
 
 bool platformShare(const QString&) { return false; }
 
@@ -186,7 +196,11 @@ void platformConfigureNotifications(const QString &, const QString &, int,
                                      const QString &, const QStringList &,
                                      const QString &) {}
 
-bool platformFcmAvailable() { return false; }
+bool platformFcmAvailable()
+{
+    // Desktop : autorise l'envoi /push vers le broker, même sans réception FCM.
+    return true;
+}
 
 #endif
 
