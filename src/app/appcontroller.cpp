@@ -1747,7 +1747,15 @@ int AppController::notifInterval()
 
 bool AppController::notifOnboardingSeen()
 {
-    return m_db.getSetting("notif.onboardingV1").has_value();
+    const auto v = m_db.getSetting("notif.onboardingV1");
+    return v && *v == "1";
+}
+
+void AppController::resetNotificationOnboarding()
+{
+    if (!m_db.isOpen()) return;
+    m_db.setSetting("notif.onboardingV1", "0");
+    emit notifSettingsChanged();
 }
 
 bool AppController::notifImmediateAvailable()

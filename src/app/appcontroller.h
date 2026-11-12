@@ -286,6 +286,7 @@ public slots:
     Q_INVOKABLE void markNotificationOnboardingSeen();
     Q_INVOKABLE void setNotificationInterval(int minutes);
     Q_INVOKABLE void testNotification();
+    Q_INVOKABLE void resetNotificationOnboarding();
     void refreshPushTopics();
     void onApplicationStateChanged(bool active);
     Q_INVOKABLE void backgroundSyncNow();

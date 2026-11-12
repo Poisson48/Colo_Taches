@@ -958,13 +958,13 @@ Item {
         ButtonGroup { id: notifGroupBox }
 
         RadioButton {
-            text: "Désactivé — rien en arrière-plan"
+            text: "Désactivé"
             checked: notifDialog.notifChoice === "off"
             onCheckedChanged: if (checked) notifDialog.notifChoice = "off"
             ButtonGroup.group: notifGroupBox
         }
         RadioButton {
-            text: "Différé — vérification toutes les 15/30/60 min, sans Google"
+            text: "Différé (15/30/60 min)"
             checked: notifDialog.notifChoice === "deferred"
             onCheckedChanged: if (checked) notifDialog.notifChoice = "deferred"
             ButtonGroup.group: notifGroupBox
@@ -1140,6 +1140,22 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
             }
             onClicked: AppController.testNotification()
+        }
+
+        Button {
+            Layout.fillWidth: true
+            flat: true
+            implicitHeight: 40
+            contentItem: Label {
+                text: "Revoir le choix des notifications"
+                color: Theme.textDim
+                horizontalAlignment: Text.AlignHCenter
+            }
+            onClicked: {
+                syncDialog.close()
+                AppController.resetNotificationOnboarding()
+                notifDialog.open()
+            }
         }
 
         onOpened: {
