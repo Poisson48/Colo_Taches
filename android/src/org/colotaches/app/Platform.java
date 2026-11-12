@@ -118,7 +118,9 @@ public class Platform {
             return;
         String alert = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getString("alert", "notify");
-        if ("silent".equals(alert))
+        String signal = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString("signal", "sound");
+        if ("silent".equals(alert) || "none".equals(signal))
             return;
         createChannel(ctx);
         NotificationManager nm = ctx.getSystemService(NotificationManager.class);

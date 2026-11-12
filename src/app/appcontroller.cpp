@@ -1765,7 +1765,8 @@ QString AppController::notifAlert()
 QString AppController::notifSignal()
 {
     const auto v = m_db.getSetting("notif.signal");
-    if (v && (*v == "vibrate" || *v == "visual")) return QString::fromStdString(*v);
+    if (v && (*v == "vibrate" || *v == "visual" || *v == "none"))
+        return QString::fromStdString(*v);
     return QStringLiteral("sound");
 }
 
@@ -1780,7 +1781,7 @@ void AppController::setNotificationPreferences(const QString &alert, const QStri
     if (!m_db.isOpen()) return;
     const QString a = alert == "silent" ? "silent" : "notify";
     QString sig = signal;
-    if (sig != "vibrate" && sig != "visual") sig = "sound";
+    if (sig != "vibrate" && sig != "visual" && sig != "none") sig = "sound";
     m_db.setSetting("notif.alert", a.toStdString());
     m_db.setSetting("notif.signal", sig.toStdString());
     platformSetNotificationPreferences(a, sig);

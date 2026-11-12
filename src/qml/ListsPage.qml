@@ -992,13 +992,14 @@ Item {
             Label { text: "Signal"; color: Theme.textDim; font.pixelSize: 13 }
             Item { Layout.fillWidth: true }
             ComboBox {
-                model: ["Son", "Vibration", "Visuel seulement"]
-                currentIndex: notifDialog.notifSignal === "vibrate" ? 1 : notifDialog.notifSignal === "visual" ? 2 : 0
-                onActivated: notifDialog.notifSignal = index === 1 ? "vibrate" : (index === 2 ? "visual" : "sound")
+                model: ["Son", "Vibration", "Visuel seulement", "Aucun"]
+                currentIndex: notifDialog.notifSignal === "vibrate" ? 1 : notifDialog.notifSignal === "visual" ? 2 : notifDialog.notifSignal === "none" ? 3 : 0
+                onActivated: notifDialog.notifSignal = index === 1 ? "vibrate" : (index === 2 ? "visual" : (index === 3 ? "none" : "sound"))
                 font.pixelSize: 14
             }
         }
         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 12; visible: notifDialog.notifChoice === "silent"; text: "Les listes continueront à se synchroniser en arrière-plan, sans aucune notification." }
+        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 12; visible: notifDialog.notifChoice === "immediate" && notifDialog.notifSignal === "none"; text: "Aucune notification : les listes se mettent à jour en arrière-plan." }
 
     }
 
@@ -1068,13 +1069,14 @@ Item {
             Label { text: "Signal"; color: Theme.textDim; font.pixelSize: 13 }
             Item { Layout.fillWidth: true }
             ComboBox {
-                model: ["Son", "Vibration", "Visuel seulement"]
-                currentIndex: notifPrefsDialog.notifSignal === "vibrate" ? 1 : notifPrefsDialog.notifSignal === "visual" ? 2 : 0
-                onActivated: notifPrefsDialog.notifSignal = index === 1 ? "vibrate" : (index === 2 ? "visual" : "sound")
+                model: ["Son", "Vibration", "Visuel seulement", "Aucun"]
+                currentIndex: notifPrefsDialog.notifSignal === "vibrate" ? 1 : notifPrefsDialog.notifSignal === "visual" ? 2 : notifPrefsDialog.notifSignal === "none" ? 3 : 0
+                onActivated: notifPrefsDialog.notifSignal = index === 1 ? "vibrate" : (index === 2 ? "visual" : (index === 3 ? "none" : "sound"))
                 font.pixelSize: 14
             }
         }
         Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 12; visible: notifPrefsDialog.notifChoice === "silent"; text: "Les listes continueront à se synchroniser en arrière-plan, sans aucune notification." }
+        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 12; visible: notifPrefsDialog.notifChoice === "immediate" && notifPrefsDialog.notifSignal === "none"; text: "Aucune notification : les listes se mettent à jour en arrière-plan." }
 
     }
 
