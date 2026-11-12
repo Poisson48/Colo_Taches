@@ -947,7 +947,7 @@ Item {
             const notify = notifChoice !== "silent" && notifChoice !== "off"
             AppController.setNotificationPreferences(notify ? "notify" : "silent", notifSignal)
             if (notifChoice === "off") AppController.setNotificationMode("off", "auto", 15)
-            else if (notifChoice === "silent") AppController.setNotificationMode(AppController.notifImmediateAvailable ? "immediate" : "deferred", "auto", notifInterval)
+            else if (notifChoice === "silent") AppController.setNotificationMode("deferred", "auto", notifInterval)
             else if (notifChoice === "deferred") AppController.setNotificationMode("deferred", "auto", notifInterval)
             else AppController.setNotificationMode("immediate", "auto", notifInterval)
         }
@@ -1008,7 +1008,7 @@ Item {
             const notify = notifChoice !== "silent" && notifChoice !== "off"
             AppController.setNotificationPreferences(notify ? "notify" : "silent", notifSignal)
             if (notifChoice === "off") AppController.setNotificationMode("off", "auto", 15)
-            else if (notifChoice === "silent") AppController.setNotificationMode(AppController.notifImmediateAvailable ? "immediate" : "deferred", "auto", notifInterval)
+            else if (notifChoice === "silent") AppController.setNotificationMode("deferred", "auto", notifInterval)
             else if (notifChoice === "deferred") AppController.setNotificationMode("deferred", "auto", notifInterval)
             else AppController.setNotificationMode("immediate", "auto", notifInterval)
         }
