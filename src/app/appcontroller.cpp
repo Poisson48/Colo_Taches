@@ -396,6 +396,8 @@ bool AppController::init() {
 
     // Aucun job de fond tant que l'utilisateur n'a pas choisi.
     platformSetNotificationPreferences(notifAlert(), notifSignal());
+    if (notifMode() == "immediate" && notifProvider() == "unifiedpush")
+        platformRegisterUnifiedPush();
     platformConfigureNotifications(QStringLiteral("off"), notifProvider(),
                                    notifInterval(), QString(), {}, m_deviceId);
 
@@ -1784,9 +1786,14 @@ void AppController::resetNotificationOnboarding()
     emit notifSettingsChanged();
 }
 
+bool AppController::notifUnifiedPushAvailable()
+{
+    return platformUnifiedPushAvailable();
+}
+
 bool AppController::notifImmediateAvailable()
 {
-    return platformFcmAvailable();
+    return platformFcmAvailable() || platformUnifiedPushAvailable();
 }
 
 QString AppController::pushBaseUrl()
@@ -1815,7 +1822,16 @@ void AppController::setNotificationMode(const QString &mode, const QString &prov
     if (!m_db.isOpen()) return;
     if (mode != "off" && mode != "deferred" && mode != "immediate") return;
     if (mode == "immediate" && !notifImmediateAvailable()) {
-        emit toast(QStringLiteral("Le mode immédiat n'est pas encore disponible"));
+        emit toast(QStringLiteral("Aucun moteur de notification immédiate disponible"));
+        return;
+    }
+    if (mode == "immediate" && provider == "fcm" && !platformFcmAvailable()) {
+        emit toast(QStringLiteral("Google FCM est indisponible sur cet appareil"));
+        return;
+    }
+    if (mode == "immediate" && provider == "unifiedpush"
+        && !platformUnifiedPushAvailable()) {
+        emit toast(QStringLiteral("Installe un distributeur UnifiedPush (par ex. ntfy)"));
         return;
     }
     if (intervalMinutes != 30 && intervalMinutes != 60) intervalMinutes = 15;
@@ -1824,11 +1840,14 @@ void AppController::setNotificationMode(const QString &mode, const QString &prov
     m_db.setSetting("notif.mode", mode.toStdString());
     m_db.setSetting("notif.provider", p.toStdString());
     m_db.setSetting("notif.interval", std::to_string(intervalMinutes));
+    if (mode == "immediate" && p == "unifiedpush")
+        platformRegisterUnifiedPush();
     m_db.setSetting("notif.onboardingV1", "1");
     refreshPushTopics();
     emit notifSettingsChanged();
     emit toast(mode == "off" ? QStringLiteral("Notifications désactivées")
-                             : QStringLiteral("Notifications différées activées"));
+              : mode == "immediate" ? QStringLiteral("Notifications immédiates activées")
+                                    : QStringLiteral("Notifications différées activées"));
 }
 
 void AppController::setNotificationInterval(int minutes)

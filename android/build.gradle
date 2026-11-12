@@ -23,6 +23,7 @@ dependencies {
     //noinspection GradleDependency
     implementation 'androidx.core:core:1.13.1'
     implementation 'com.google.firebase:firebase-messaging:24.1.0'
+    implementation 'org.unifiedpush.android:connector:3.1.0'
 }
 
 android {

@@ -23,6 +23,10 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import org.json.JSONObject;
+import org.unifiedpush.android.connector.UnifiedPush;
 
 // Services natifs appelés depuis C++ via JNI (src/app/platform.cpp) : notification
 // locale après un merge distant (SPEC §8) et feuille de partage du lien d'appairage.
@@ -148,6 +152,56 @@ public class Platform {
     public static boolean isFcmAvailable(Context ctx) {
         if (ctx == null) return false;
         return ctx != null && !FirebaseApp.getApps(ctx).isEmpty();
+    }
+
+    public static boolean isUnifiedPushAvailable(Context ctx) {
+        if (ctx == null) return false;
+        try { return !UnifiedPush.getDistributors(ctx).isEmpty(); }
+        catch (RuntimeException e) { return false; }
+    }
+
+    public static boolean registerUnifiedPush(Context ctx) {
+        if (ctx == null) return false;
+        try {
+            java.util.List<String> distributors = UnifiedPush.getDistributors(ctx);
+            if (distributors == null || distributors.isEmpty()) return false;
+            if (UnifiedPush.getAckDistributor(ctx) == null) {
+                String saved = UnifiedPush.getSavedDistributor(ctx);
+                UnifiedPush.saveDistributor(ctx,
+                        saved != null ? saved : distributors.get(0));
+            }
+            UnifiedPush.register(ctx, "colo", "Colo Tâches", null);
+            return true;
+        } catch (RuntimeException e) { return false; }
+    }
+
+    public static void registerUnifiedPushEndpoint(Context ctx, String endpoint) {
+        if (ctx == null || endpoint == null || endpoint.isEmpty()) return;
+        final String app = ctx.getPackageName().contains("taches")
+                ? "colotaches" : "colocourse";
+        new Thread(() -> {
+            HttpURLConnection c = null;
+            try {
+                URL u = new URL("https://colo-apps.les-crevettes-cevenoles.fr/push");
+                c = (HttpURLConnection) u.openConnection();
+                c.setRequestMethod("POST");
+                c.setDoOutput(true);
+                c.setConnectTimeout(8000);
+                c.setReadTimeout(8000);
+                c.setRequestProperty("Content-Type", "application/json");
+                JSONObject body = new JSONObject();
+                body.put("action", "register");
+                body.put("app", app);
+                body.put("endpoint", endpoint);
+                try (OutputStream os = c.getOutputStream()) {
+                    os.write(body.toString().getBytes("UTF-8"));
+                }
+                c.getResponseCode();
+            } catch (Exception ignored) {
+            } finally {
+                if (c != null) c.disconnect();
+            }
+        }).start();
     }
 
     public static void startBackgroundSyncService(Context ctx) {

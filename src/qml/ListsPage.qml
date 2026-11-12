@@ -936,11 +936,13 @@ Item {
         property string notifChoice: ""
         property int notifInterval: 15
         property string notifSignal: "sound"
+        property string notifProviderChoice: "fcm"
 
         onOpened: {
             notifChoice = ""
             notifInterval = 15
             notifSignal = AppController.notifSignal
+            notifProviderChoice = AppController.notifProvider === "unifiedpush" || !AppController.notifImmediateAvailable ? "unifiedpush" : "fcm"
             AppController.markNotificationOnboardingSeen()
         }
         onAccepted: {
@@ -949,16 +951,28 @@ Item {
             if (notifChoice === "off") AppController.setNotificationMode("off", "auto", 15)
             else if (notifChoice === "silent") AppController.setNotificationMode("deferred", "auto", notifInterval)
             else if (notifChoice === "deferred") AppController.setNotificationMode("deferred", "auto", notifInterval)
-            else AppController.setNotificationMode("immediate", "auto", notifInterval)
+            else AppController.setNotificationMode("immediate", notifProviderChoice, notifInterval)
         }
 
-        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 13; text: "Immédiat = Google FCM. Par périodes = sans Google, via le serveur Colo." }
+        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 13; text: "Immédiat : Google FCM ou UnifiedPush. Par périodes : sans Google, via le serveur Colo." }
         ButtonGroup { id: notifGroupBox }
-        RadioButton { text: "M'avertir immédiatement (Google FCM)"; checked: notifDialog.notifChoice === "immediate"; onCheckedChanged: if (checked) notifDialog.notifChoice = "immediate"; ButtonGroup.group: notifGroupBox }
+        RadioButton { text: "M'avertir immédiatement"; checked: notifDialog.notifChoice === "immediate"; onCheckedChanged: if (checked) notifDialog.notifChoice = "immediate"; ButtonGroup.group: notifGroupBox }
         RadioButton { text: "M'avertir par périodes (sans Google)"; checked: notifDialog.notifChoice === "deferred"; onCheckedChanged: if (checked) notifDialog.notifChoice = "deferred"; ButtonGroup.group: notifGroupBox }
         RadioButton { text: "Synchroniser sans notification"; checked: notifDialog.notifChoice === "silent"; onCheckedChanged: if (checked) notifDialog.notifChoice = "silent"; ButtonGroup.group: notifGroupBox }
         RadioButton { text: "Ne rien faire en arrière-plan"; checked: notifDialog.notifChoice === "off"; onCheckedChanged: if (checked) notifDialog.notifChoice = "off"; ButtonGroup.group: notifGroupBox }
-        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 11; visible: notifDialog.notifChoice === "immediate"; text: "Google reçoit un signal générique, jamais le contenu des listes." }
+        RowLayout {
+            Layout.fillWidth: true
+            visible: notifDialog.notifChoice === "immediate"
+            Label { text: "Moteur"; color: Theme.textDim; font.pixelSize: 13 }
+            Item { Layout.fillWidth: true }
+            ComboBox {
+                model: ["Google FCM", "Sans Google (UnifiedPush)"]
+                currentIndex: notifDialog.notifProviderChoice === "unifiedpush" ? 1 : 0
+                onActivated: notifDialog.notifProviderChoice = index === 1 ? "unifiedpush" : "fcm"
+                font.pixelSize: 14
+            }
+        }
+        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 11; visible: notifDialog.notifChoice === "immediate"; text: notifDialog.notifProviderChoice === "fcm" ? "Google reçoit un signal générique, jamais le contenu des listes." : "Passe par ton distributeur UnifiedPush (ntfy), sans Google." }
         RowLayout {
             Layout.fillWidth: true
             visible: notifDialog.notifChoice === "deferred"
@@ -997,6 +1011,7 @@ Item {
         property string notifChoice: ""
         property int notifInterval: 15
         property string notifSignal: "sound"
+        property string notifProviderChoice: "fcm"
 
         onOpened: {
             const m = AppController.notifMode
@@ -1004,6 +1019,7 @@ Item {
             notifChoice = m === "off" ? "off" : (a === "silent" ? "silent" : (m === "deferred" ? "deferred" : "immediate"))
             notifInterval = AppController.notifInterval
             notifSignal = AppController.notifSignal
+            notifProviderChoice = AppController.notifProvider === "unifiedpush" || !AppController.notifImmediateAvailable ? "unifiedpush" : "fcm"
         }
         onAccepted: {
             const notify = notifChoice !== "silent" && notifChoice !== "off"
@@ -1011,16 +1027,28 @@ Item {
             if (notifChoice === "off") AppController.setNotificationMode("off", "auto", 15)
             else if (notifChoice === "silent") AppController.setNotificationMode("deferred", "auto", notifInterval)
             else if (notifChoice === "deferred") AppController.setNotificationMode("deferred", "auto", notifInterval)
-            else AppController.setNotificationMode("immediate", "auto", notifInterval)
+            else AppController.setNotificationMode("immediate", notifProviderChoice, notifInterval)
         }
 
-        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 13; text: "Immédiat = Google FCM. Par périodes = sans Google, via le serveur Colo." }
+        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 13; text: "Immédiat : Google FCM ou UnifiedPush. Par périodes : sans Google, via le serveur Colo." }
         ButtonGroup { id: prefsGroupBox }
-        RadioButton { text: "M'avertir immédiatement (Google FCM)"; checked: notifPrefsDialog.notifChoice === "immediate"; onCheckedChanged: if (checked) notifPrefsDialog.notifChoice = "immediate"; ButtonGroup.group: prefsGroupBox }
+        RadioButton { text: "M'avertir immédiatement"; checked: notifPrefsDialog.notifChoice === "immediate"; onCheckedChanged: if (checked) notifPrefsDialog.notifChoice = "immediate"; ButtonGroup.group: prefsGroupBox }
         RadioButton { text: "M'avertir par périodes (sans Google)"; checked: notifPrefsDialog.notifChoice === "deferred"; onCheckedChanged: if (checked) notifPrefsDialog.notifChoice = "deferred"; ButtonGroup.group: prefsGroupBox }
         RadioButton { text: "Synchroniser sans notification"; checked: notifPrefsDialog.notifChoice === "silent"; onCheckedChanged: if (checked) notifPrefsDialog.notifChoice = "silent"; ButtonGroup.group: prefsGroupBox }
         RadioButton { text: "Ne rien faire en arrière-plan"; checked: notifPrefsDialog.notifChoice === "off"; onCheckedChanged: if (checked) notifPrefsDialog.notifChoice = "off"; ButtonGroup.group: prefsGroupBox }
-        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 11; visible: notifPrefsDialog.notifChoice === "immediate"; text: "Google reçoit un signal générique, jamais le contenu des listes." }
+        RowLayout {
+            Layout.fillWidth: true
+            visible: notifPrefsDialog.notifChoice === "immediate"
+            Label { text: "Moteur"; color: Theme.textDim; font.pixelSize: 13 }
+            Item { Layout.fillWidth: true }
+            ComboBox {
+                model: ["Google FCM", "Sans Google (UnifiedPush)"]
+                currentIndex: notifPrefsDialog.notifProviderChoice === "unifiedpush" ? 1 : 0
+                onActivated: notifPrefsDialog.notifProviderChoice = index === 1 ? "unifiedpush" : "fcm"
+                font.pixelSize: 14
+            }
+        }
+        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.textDim; font.pixelSize: 11; visible: notifPrefsDialog.notifChoice === "immediate"; text: notifPrefsDialog.notifProviderChoice === "fcm" ? "Google reçoit un signal générique, jamais le contenu des listes." : "Passe par ton distributeur UnifiedPush (ntfy), sans Google." }
         RowLayout {
             Layout.fillWidth: true
             visible: notifPrefsDialog.notifChoice === "deferred"

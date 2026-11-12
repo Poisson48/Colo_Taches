@@ -144,6 +144,24 @@ void platformSetNotificationPreferences(const QString &alert, const QString &sig
         ctx.object(), a.object<jstring>(), s.object<jstring>());
 }
 
+bool platformUnifiedPushAvailable()
+{
+    const QJniObject ctx = androidContext();
+    if (!ctx.isValid()) return false;
+    return QJniObject::callStaticMethod<jboolean>(
+        kPlatformClass, "isUnifiedPushAvailable", "(Landroid/content/Context;)Z",
+        ctx.object());
+}
+
+bool platformRegisterUnifiedPush()
+{
+    const QJniObject ctx = androidContext();
+    if (!ctx.isValid()) return false;
+    return QJniObject::callStaticMethod<jboolean>(
+        kPlatformClass, "registerUnifiedPush", "(Landroid/content/Context;)Z",
+        ctx.object());
+}
+
 bool platformFcmAvailable()
 {
     const QJniObject ctx = androidContext();
@@ -209,6 +227,9 @@ void platformConfigureNotifications(const QString &, const QString &, int,
                                      const QString &) {}
 
 void platformSetNotificationPreferences(const QString &, const QString &) {}
+
+bool platformUnifiedPushAvailable() { return false; }
+bool platformRegisterUnifiedPush() { return false; }
 
 bool platformFcmAvailable()
 {

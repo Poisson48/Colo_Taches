@@ -116,6 +116,7 @@ class AppController : public QObject {
     Q_PROPERTY(bool notifImmediateAvailable READ notifImmediateAvailable NOTIFY notifSettingsChanged)
     Q_PROPERTY(QString notifAlert READ notifAlert NOTIFY notifSettingsChanged)
     Q_PROPERTY(QString notifSignal READ notifSignal NOTIFY notifSettingsChanged)
+    Q_PROPERTY(bool notifUnifiedPushAvailable READ notifUnifiedPushAvailable NOTIFY notifSettingsChanged)
 
 public:
     explicit AppController(QObject *parent = nullptr);
@@ -152,6 +153,7 @@ public:
     bool    notifImmediateAvailable();
     QString notifAlert();
     QString notifSignal();
+    bool    notifUnifiedPushAvailable();
     QString pushBaseUrl();
     Q_INVOKABLE QString defaultPushBaseUrl() const;
 

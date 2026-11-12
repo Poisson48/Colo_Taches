@@ -2,8 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.colotaches.app"
     android:installLocation="auto"
-    android:versionCode="1"
-    android:versionName="0.1.0">
+    android:versionCode="1010"
+    android:versionName="0.9.13">
 
     <!-- Relais Nostr en wss:// : réseau obligatoire. -->
     <uses-permission android:name="android.permission.INTERNET"/>
@@ -86,6 +86,13 @@
                        android:value="-- %%INSERT_APP_LIB_NAME%% --"/>
             <meta-data android:name="android.app.arguments" android:value="-service"/>
             <meta-data android:name="android.app.background_running" android:value="true"/>
+        </service>
+        <service
+            android:name="org.colotaches.app.UnifiedPushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT"/>
+            </intent-filter>
         </service>
         <service
             android:name="org.colotaches.app.FcmService"
